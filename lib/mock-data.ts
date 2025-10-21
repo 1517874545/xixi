@@ -138,6 +138,15 @@ export const mockDesigns: Design[] = [
   }
 ]
 
+export const mockUser = {
+  id: "user1",
+  name: "Demo User",
+  email: "demo@example.com",
+  designs_count: 5,
+  followers_count: 24,
+  following_count: 12
+}
+
 export const mockComments: Comment[] = [
   {
     id: "comment1",
