@@ -2,12 +2,13 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { MessageCircle, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import type { Comment } from "@/lib/mock-data"
+import { commentsApi } from "@/lib/api"
 
 interface CommentSectionProps {
   designId: string
@@ -18,27 +19,43 @@ export function CommentSection({ designId, initialComments = [] }: CommentSectio
   const [comments, setComments] = useState<Comment[]>(initialComments)
   const [newComment, setNewComment] = useState("")
   const [showComments, setShowComments] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newComment.trim()) return
-
-    const comment: Comment = {
-      id: `c${Date.now()}`,
-      user_id: "user1",
-      design_id: designId,
-      content: newComment,
-      created_at: new Date().toISOString(),
-      user_name: "PetLover123",
+  useEffect(() => {
+    if (showComments) {
+      loadComments()
     }
+  }, [showComments, designId])
 
-    setComments([...comments, comment])
-    setNewComment("")
+  const loadComments = async () => {
+    try {
+      const fetchedComments = await commentsApi.getByDesign(designId)
+      setComments(fetchedComments)
+    } catch (error) {
+      console.error('Failed to load comments:', error)
+    }
+  }
 
-    // Store in localStorage
-    const allComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
-    allComments.push(comment)
-    localStorage.setItem("petcraft_comments", JSON.stringify(allComments))
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newComment.trim() || loading) return
+
+    setLoading(true)
+    try {
+      const comment = await commentsApi.create(designId, newComment)
+      // 立即添加新评论到列表
+      setComments(prev => [comment, ...prev])
+      setNewComment("")
+      
+      // 延迟一小段时间后重新加载评论列表，确保数据库操作完成
+      setTimeout(() => {
+        loadComments()
+      }, 500)
+    } catch (error) {
+      console.error('Failed to create comment:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -74,8 +91,9 @@ export function CommentSection({ designId, initialComments = [] }: CommentSectio
               onChange={(e) => setNewComment(e.target.value)}
               placeholder="Add a comment..."
               className="min-h-[60px] resize-none"
+              disabled={loading}
             />
-            <Button type="submit" size="icon" disabled={!newComment.trim()}>
+            <Button type="submit" size="icon" disabled={!newComment.trim() || loading}>
               <Send className="h-4 w-4" />
             </Button>
           </form>

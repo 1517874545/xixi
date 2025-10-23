@@ -4,25 +4,39 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { mockUser, mockDesigns, mockComponents, type Design } from "@/lib/mock-data"
+import { mockUser, mockComponents, type Design } from "@/lib/mock-data"
 import { User, Heart } from "lucide-react"
+import { designsApi, likesApi } from "@/lib/api"
 
 export default function ProfilePage() {
   const [myDesigns, setMyDesigns] = useState<Design[]>([])
   const [likedDesigns, setLikedDesigns] = useState<Design[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Load user's designs
-    const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
-    const userDesigns = [...mockDesigns, ...savedDesigns].filter((d: Design) => d.user_id === mockUser.id)
-    setMyDesigns(userDesigns)
-
-    // Load liked designs
-    const likes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
-    const allDesigns = [...mockDesigns, ...savedDesigns]
-    const liked = allDesigns.filter((d: Design) => likes.includes(d.id))
-    setLikedDesigns(liked)
+    loadProfileData()
   }, [])
+
+  const loadProfileData = async () => {
+    try {
+      setLoading(true)
+      
+      // Load user's designs (using mock user ID for now)
+      const userDesigns = await designsApi.getAll({ userId: mockUser.id })
+      setMyDesigns(userDesigns)
+
+      // Load liked designs
+      const likedDesigns = await likesApi.getUserLikes()
+      setLikedDesigns(likedDesigns)
+    } catch (error) {
+      console.error('Failed to load profile data:', error)
+      // Fallback to empty arrays on error
+      setMyDesigns([])
+      setLikedDesigns([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -78,7 +92,7 @@ export default function ProfilePage() {
                   <Link key={design.id} href={`/design/${design.id}`}>
                     <Card className="p-4 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]">
                       <svg viewBox="0 0 300 300" className="w-full h-48 mb-4 bg-muted rounded-lg">
-                        {design.components.background && (
+                        {design.components?.background && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.background)?.svg_data || "",
@@ -86,7 +100,7 @@ export default function ProfilePage() {
                             style={{ color: design.components.bodyColor }}
                           />
                         )}
-                        {design.components.body && (
+                        {design.components?.body && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.body)?.svg_data || "",
@@ -94,7 +108,7 @@ export default function ProfilePage() {
                             style={{ color: design.components.bodyColor }}
                           />
                         )}
-                        {design.components.ears && (
+                        {design.components?.ears && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.ears)?.svg_data || "",
@@ -102,28 +116,28 @@ export default function ProfilePage() {
                             style={{ color: design.components.bodyColor }}
                           />
                         )}
-                        {design.components.eyes && (
+                        {design.components?.eyes && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.eyes)?.svg_data || "",
                             }}
                           />
                         )}
-                        {design.components.nose && (
+                        {design.components?.nose && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.nose)?.svg_data || "",
                             }}
                           />
                         )}
-                        {design.components.mouth && (
+                        {design.components?.mouth && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.mouth)?.svg_data || "",
                             }}
                           />
                         )}
-                        {design.components.accessories && (
+                        {design.components?.accessories && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html:
@@ -162,7 +176,7 @@ export default function ProfilePage() {
                   <Link key={design.id} href={`/design/${design.id}`}>
                     <Card className="p-4 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]">
                       <svg viewBox="0 0 300 300" className="w-full h-48 mb-4 bg-muted rounded-lg">
-                        {design.components.background && (
+                        {design.components?.background && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.background)?.svg_data || "",
@@ -170,7 +184,7 @@ export default function ProfilePage() {
                             style={{ color: design.components.bodyColor }}
                           />
                         )}
-                        {design.components.body && (
+                        {design.components?.body && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.body)?.svg_data || "",
@@ -178,7 +192,7 @@ export default function ProfilePage() {
                             style={{ color: design.components.bodyColor }}
                           />
                         )}
-                        {design.components.ears && (
+                        {design.components?.ears && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.ears)?.svg_data || "",
@@ -186,28 +200,28 @@ export default function ProfilePage() {
                             style={{ color: design.components.bodyColor }}
                           />
                         )}
-                        {design.components.eyes && (
+                        {design.components?.eyes && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.eyes)?.svg_data || "",
                             }}
                           />
                         )}
-                        {design.components.nose && (
+                        {design.components?.nose && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.nose)?.svg_data || "",
                             }}
                           />
                         )}
-                        {design.components.mouth && (
+                        {design.components?.mouth && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html: mockComponents.find((c) => c.id === design.components.mouth)?.svg_data || "",
                             }}
                           />
                         )}
-                        {design.components.accessories && (
+                        {design.components?.accessories && (
                           <g
                             dangerouslySetInnerHTML={{
                               __html:

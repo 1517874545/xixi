@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { mockComponents, type Component, type Design } from "@/lib/mock-data"
 import { Save, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { designsApi, componentsApi } from "@/lib/api"
 
 export default function EditorPage() {
   const { user } = useAuth()
@@ -104,7 +105,7 @@ export default function EditorPage() {
     }
   }, [toast])
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!user) {
       router.push("/login")
       return
@@ -125,40 +126,32 @@ export default function EditorPage() {
       is_public: false,
     }
 
-    const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
-
-    if (editingDesignId) {
-      // Update existing design
-      const designIndex = savedDesigns.findIndex((d: Design) => d.id === editingDesignId)
-      if (designIndex !== -1) {
-        savedDesigns[designIndex] = {
-          ...savedDesigns[designIndex],
-          ...design,
-          id: editingDesignId,
-        }
+    try {
+      if (editingDesignId) {
+        // Update existing design using API
+        await designsApi.update(editingDesignId, design)
         toast({
           title: "Design updated",
           description: "Your changes have been saved.",
         })
+      } else {
+        // Create new design using API
+        await designsApi.create(design)
+        toast({
+          title: "Design saved",
+          description: "Your design has been created successfully.",
+        })
       }
-    } else {
-      // Create new design
-      savedDesigns.push({
-        ...design,
-        id: Date.now().toString(),
-        user_id: user.id,
-        created_at: new Date().toISOString(),
-        likes_count: 0,
-        comments_count: 0,
-      })
+      
+      router.push("/my-designs")
+    } catch (error) {
+      console.error('Failed to save design:', error)
       toast({
-        title: "Design saved",
-        description: "Your design has been created successfully.",
+        title: "Error",
+        description: "Failed to save design",
+        variant: "destructive"
       })
     }
-
-    localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
-    router.push("/my-designs")
   }
 
   const handleDownload = () => {

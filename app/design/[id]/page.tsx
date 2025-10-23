@@ -12,6 +12,7 @@ import { FollowButton } from "@/components/follow-button"
 import { useAuth } from "@/lib/auth-context"
 import { ArrowLeft, Share2, Edit, User, Calendar } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { designsApi } from "@/lib/api"
 
 export default function DesignDetailPage() {
   const params = useParams()
@@ -24,25 +25,42 @@ export default function DesignDetailPage() {
 
   useEffect(() => {
     const designId = params.id as string
-    const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
-    const allDesigns = [...mockDesigns, ...savedDesigns]
-    const foundDesign = allDesigns.find((d: Design) => d.id === designId)
+    
+    const loadDesign = async () => {
+      try {
+        // 首先尝试从API获取设计
+        const foundDesign = await designsApi.getById(designId)
+        if (foundDesign) {
+          setDesign(foundDesign)
+          return
+        }
+      } catch (error) {
+        console.error('Failed to load design from API:', error)
+        
+        // 如果API失败，尝试从本地存储和模拟数据中查找
+        const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+        const allDesigns = [...mockDesigns, ...savedDesigns]
+        const foundDesign = allDesigns.find((d: Design) => d.id === designId)
 
-    if (foundDesign) {
-      setDesign(foundDesign)
-
-      // Load likes
-      const likes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
-      setIsLiked(likes.includes(designId))
-
-      // Load comments
-      const allComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
-      const designComments = [
-        ...mockComments.filter((c) => c.design_id === designId),
-        ...allComments.filter((c: any) => c.design_id === designId),
-      ]
-      setComments(designComments)
+        if (foundDesign) {
+          setDesign(foundDesign)
+        }
+      }
     }
+
+    loadDesign()
+
+    // Load likes
+    const likes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+    setIsLiked(likes.includes(designId))
+
+    // Load comments
+    const allComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+    const designComments = [
+      ...mockComments.filter((c) => c.design_id === designId),
+      ...allComments.filter((c: any) => c.design_id === designId),
+    ]
+    setComments(designComments)
   }, [params.id])
 
   const handleShare = () => {
@@ -105,69 +123,69 @@ export default function DesignDetailPage() {
           <Card className="p-6">
             <svg viewBox="0 0 300 300" className="w-full h-auto bg-muted rounded-lg">
               {/* Background */}
-              {design.components.background && (
+              {design.components?.background && (
                 <g
                   dangerouslySetInnerHTML={{
-                    __html: mockComponents.find((c) => c.id === design.components.background)?.svg_data || "",
+                    __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
                   }}
-                  style={{ color: design.components.bodyColor }}
+                  style={{ color: design.components?.bodyColor }}
                 />
               )}
 
               {/* Body */}
-              {design.components.body && (
+              {design.components?.body && (
                 <g
                   dangerouslySetInnerHTML={{
-                    __html: mockComponents.find((c) => c.id === design.components.body)?.svg_data || "",
+                    __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
                   }}
-                  style={{ color: design.components.bodyColor }}
+                  style={{ color: design.components?.bodyColor }}
                 />
               )}
 
               {/* Ears */}
-              {design.components.ears && (
+              {design.components?.ears && (
                 <g
                   dangerouslySetInnerHTML={{
-                    __html: mockComponents.find((c) => c.id === design.components.ears)?.svg_data || "",
+                    __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
                   }}
-                  style={{ color: design.components.earsColor || design.components.bodyColor }}
+                  style={{ color: design.components?.earsColor || design.components?.bodyColor }}
                 />
               )}
 
               {/* Eyes */}
-              {design.components.eyes && (
+              {design.components?.eyes && (
                 <g
                   dangerouslySetInnerHTML={{
-                    __html: mockComponents.find((c) => c.id === design.components.eyes)?.svg_data || "",
+                    __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
                   }}
                 />
               )}
 
               {/* Nose */}
-              {design.components.nose && (
+              {design.components?.nose && (
                 <g
                   dangerouslySetInnerHTML={{
-                    __html: mockComponents.find((c) => c.id === design.components.nose)?.svg_data || "",
+                    __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
                   }}
                 />
               )}
 
               {/* Mouth */}
-              {design.components.mouth && (
+              {design.components?.mouth && (
                 <g
                   dangerouslySetInnerHTML={{
-                    __html: mockComponents.find((c) => c.id === design.components.mouth)?.svg_data || "",
+                    __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
                   }}
                 />
               )}
 
               {/* Accessories */}
-              {design.components.accessories && (
+              {design.components?.accessories && (
                 <g
                   dangerouslySetInnerHTML={{
-                    __html: mockComponents.find((c) => c.id === design.components.accessories)?.svg_data || "",
+                    __html: mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
                   }}
-                  style={{ color: design.components.accessoriesColor || "#000000" }}
+                  style={{ color: design.components?.accessoriesColor || "#000000" }}
                 />
               )}
             </svg>

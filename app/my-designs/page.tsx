@@ -10,26 +10,46 @@ import { Trash2, Eye, EyeOff, Edit, Share2, Heart, MessageCircle, TrendingUp, Ca
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
+import { designsApi } from "@/lib/api"
 
 export default function MyDesignsPage() {
-  const { user, loading } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
   const [designs, setDesigns] = useState<Design[]>([])
   const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([])
   const [sortBy, setSortBy] = useState<"date" | "likes">("date")
   const [filterBy, setFilterBy] = useState<"all" | "public" | "private">("all")
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!authLoading && !user) {
       router.push("/login")
       return
     }
 
-    // Load designs from localStorage (mock data)
-    const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
-    setDesigns(savedDesigns)
-  }, [user, loading, router])
+    if (user) {
+      loadDesigns()
+    }
+  }, [user, authLoading, router])
+
+  const loadDesigns = async () => {
+    try {
+      setLoading(true)
+      // 加载所有设计（包括公开和私有）
+      const userDesigns = await designsApi.getAll()
+      setDesigns(userDesigns)
+    } catch (error) {
+      console.error('Failed to load designs:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load your designs",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     let filtered = [...designs]
@@ -51,19 +71,28 @@ export default function MyDesignsPage() {
     setFilteredDesigns(filtered)
   }, [designs, sortBy, filterBy])
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this design?")) return
 
-    const updatedDesigns = designs.filter((d) => d.id !== id)
-    setDesigns(updatedDesigns)
-    localStorage.setItem("petcraft_designs", JSON.stringify(updatedDesigns))
-    toast({
-      title: "Design deleted",
-      description: "Your design has been removed.",
-    })
+    try {
+      await designsApi.delete(id)
+      const updatedDesigns = designs.filter((d) => d.id !== id)
+      setDesigns(updatedDesigns)
+      toast({
+        title: "Design deleted",
+        description: "Your design has been removed.",
+      })
+    } catch (error) {
+      console.error('Failed to delete design:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete design",
+        variant: "destructive"
+      })
+    }
   }
 
-  const togglePublic = (id: string) => {
+  const togglePublic = async (id: string) => {
     const design = designs.find((d) => d.id === id)
 
     if (design && !design.is_public) {
@@ -72,17 +101,25 @@ export default function MyDesignsPage() {
       }
     }
 
-    const updatedDesigns = designs.map((d) => (d.id === id ? { ...d, is_public: !d.is_public } : d))
-    setDesigns(updatedDesigns)
-    localStorage.setItem("petcraft_designs", JSON.stringify(updatedDesigns))
+    try {
+      const updatedDesign = await designsApi.update(id, { is_public: !design?.is_public })
+      const updatedDesigns = designs.map((d) => (d.id === id ? updatedDesign : d))
+      setDesigns(updatedDesigns)
 
-    const updatedDesign = updatedDesigns.find((d) => d.id === id)
-    toast({
-      title: updatedDesign?.is_public ? "Design published" : "Design unpublished",
-      description: updatedDesign?.is_public
-        ? "Your design is now visible in the public gallery."
-        : "Your design is now private.",
-    })
+      toast({
+        title: updatedDesign.is_public ? "Design published" : "Design unpublished",
+        description: updatedDesign.is_public
+          ? "Your design is now visible in the public gallery."
+          : "Your design is now private.",
+      })
+    } catch (error) {
+      console.error('Failed to update design visibility:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update design visibility",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleEdit = (design: Design) => {
@@ -236,67 +273,67 @@ export default function MyDesignsPage() {
                       className="w-full h-48 mb-4 bg-muted rounded-lg hover:scale-105 transition-transform"
                     >
                       {/* Background */}
-                      {design.components.background && (
+                      {design.components?.background && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components.background)?.svg_data || "",
+                            __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
                           }}
-                          style={{ color: design.components.bodyColor }}
+                          style={{ color: design.components?.bodyColor }}
                         />
                       )}
 
                       {/* Body */}
-                      {design.components.body && (
+                      {design.components?.body && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components.body)?.svg_data || "",
+                            __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
                           }}
-                          style={{ color: design.components.bodyColor }}
+                          style={{ color: design.components?.bodyColor }}
                         />
                       )}
 
                       {/* Ears */}
-                      {design.components.ears && (
+                      {design.components?.ears && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components.ears)?.svg_data || "",
+                            __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
                           }}
-                          style={{ color: design.components.bodyColor }}
+                          style={{ color: design.components?.bodyColor }}
                         />
                       )}
 
                       {/* Eyes */}
-                      {design.components.eyes && (
+                      {design.components?.eyes && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components.eyes)?.svg_data || "",
+                            __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
                           }}
                         />
                       )}
 
                       {/* Nose */}
-                      {design.components.nose && (
+                      {design.components?.nose && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components.nose)?.svg_data || "",
+                            __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
                           }}
                         />
                       )}
 
                       {/* Mouth */}
-                      {design.components.mouth && (
+                      {design.components?.mouth && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components.mouth)?.svg_data || "",
+                            __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
                           }}
                         />
                       )}
 
                       {/* Accessories */}
-                      {design.components.accessories && (
+                      {design.components?.accessories && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components.accessories)?.svg_data || "",
+                            __html: mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
                           }}
                         />
                       )}

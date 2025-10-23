@@ -23,11 +23,11 @@ export default function LoginPage() {
     e.preventDefault()
     setError("")
 
-    try {
-      await signIn(email, password)
+    const { error } = await signIn(email, password)
+    if (error) {
+      setError(error)
+    } else {
       router.push("/editor")
-    } catch (err) {
-      setError("Failed to sign in. Please try again.")
     }
   }
 

@@ -3,44 +3,29 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
-import { mockComponents, mockDesigns, mockComments, type Design } from "@/lib/mock-data"
+import { mockComponents, type Design } from "@/lib/mock-data"
 import { FollowButton } from "@/components/follow-button"
 import { User, MessageCircle, Heart } from "lucide-react"
+import { designsApi } from "@/lib/api"
 
 export default function GalleryPage() {
   const router = useRouter()
   const [designs, setDesigns] = useState<Design[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const loadDesigns = () => {
-      const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
-      const publicDesigns = [...mockDesigns, ...savedDesigns.filter((d: Design) => d.is_public)]
-
-      const likes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
-      const allComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
-
-      const enhancedDesigns = publicDesigns.map((design: Design) => ({
-        ...design,
-        isLiked: likes.includes(design.id),
-        designComments: [
-          ...mockComments.filter((c) => c.design_id === design.id),
-          ...allComments.filter((c: any) => c.design_id === design.id),
-        ],
-      }))
-
-      setDesigns(enhancedDesigns)
-    }
-
-    loadDesigns()
-
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "petcraft_designs") {
-        loadDesigns()
+    const loadDesigns = async () => {
+      try {
+        const publicDesigns = await designsApi.getAll({ isPublic: true })
+        setDesigns(publicDesigns)
+      } catch (error) {
+        console.error('Failed to load designs:', error)
+      } finally {
+        setLoading(false)
       }
     }
 
-    window.addEventListener("storage", handleStorageChange)
-    return () => window.removeEventListener("storage", handleStorageChange)
+    loadDesigns()
   }, [])
 
   return (
@@ -71,69 +56,69 @@ export default function GalleryPage() {
                   className="w-full h-48 mb-4 bg-muted rounded-lg group-hover:scale-105 transition-transform"
                 >
                   {/* Background */}
-                  {design.components.background && (
+                  {design.components?.background && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components.background)?.svg_data || "",
+                        __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
                       }}
-                      style={{ color: design.components.bodyColor }}
+                      style={{ color: design.components?.bodyColor }}
                     />
                   )}
 
                   {/* Body */}
-                  {design.components.body && (
+                  {design.components?.body && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components.body)?.svg_data || "",
+                        __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
                       }}
-                      style={{ color: design.components.bodyColor }}
+                      style={{ color: design.components?.bodyColor }}
                     />
                   )}
 
                   {/* Ears */}
-                  {design.components.ears && (
+                  {design.components?.ears && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components.ears)?.svg_data || "",
+                        __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
                       }}
-                      style={{ color: design.components.earsColor || design.components.bodyColor }}
+                      style={{ color: design.components?.earsColor || design.components?.bodyColor }}
                     />
                   )}
 
                   {/* Eyes */}
-                  {design.components.eyes && (
+                  {design.components?.eyes && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components.eyes)?.svg_data || "",
+                        __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
                       }}
                     />
                   )}
 
                   {/* Nose */}
-                  {design.components.nose && (
+                  {design.components?.nose && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components.nose)?.svg_data || "",
+                        __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
                       }}
                     />
                   )}
 
                   {/* Mouth */}
-                  {design.components.mouth && (
+                  {design.components?.mouth && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components.mouth)?.svg_data || "",
+                        __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
                       }}
                     />
                   )}
 
                   {/* Accessories */}
-                  {design.components.accessories && (
+                  {design.components?.accessories && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components.accessories)?.svg_data || "",
+                        __html: mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
                       }}
-                      style={{ color: design.components.accessoriesColor || "#000000" }}
+                      style={{ color: design.components?.accessoriesColor || "#000000" }}
                     />
                   )}
                 </svg>
