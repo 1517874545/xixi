@@ -110,8 +110,8 @@ export async function PUT(
         const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
         if (serviceKey) {
           const serviceClient = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            serviceKey
+            supabaseUrl || 'https://example.supabase.co',
+            serviceKey || 'example-key'
           )
           
           const { data: serviceDesign, error: serviceError } = await serviceClient
@@ -211,8 +211,8 @@ export async function DELETE(
         if (serviceKey) {
           try {
             const serviceClient = createClient(
-              process.env.NEXT_PUBLIC_SUPABASE_URL!,
-              serviceKey
+              supabaseUrl || 'https://example.supabase.co',
+              serviceKey || 'example-key'
             )
             
             const { error: serviceError } = await serviceClient
