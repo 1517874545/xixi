@@ -95,45 +95,45 @@ export default function ProfilePage() {
                         {design.components?.background && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.background)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
                             }}
-                            style={{ color: design.components.bodyColor }}
+                            style={{ color: design.components?.bodyColor }}
                           />
                         )}
                         {design.components?.body && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.body)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
                             }}
-                            style={{ color: design.components.bodyColor }}
+                            style={{ color: design.components?.bodyColor }}
                           />
                         )}
                         {design.components?.ears && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.ears)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
                             }}
-                            style={{ color: design.components.bodyColor }}
+                            style={{ color: design.components?.bodyColor }}
                           />
                         )}
                         {design.components?.eyes && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.eyes)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
                             }}
                           />
                         )}
                         {design.components?.nose && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.nose)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
                             }}
                           />
                         )}
                         {design.components?.mouth && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.mouth)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
                             }}
                           />
                         )}
@@ -141,7 +141,7 @@ export default function ProfilePage() {
                           <g
                             dangerouslySetInnerHTML={{
                               __html:
-                                mockComponents.find((c) => c.id === design.components.accessories)?.svg_data || "",
+                                mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
                             }}
                           />
                         )}
@@ -179,45 +179,45 @@ export default function ProfilePage() {
                         {design.components?.background && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.background)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
                             }}
-                            style={{ color: design.components.bodyColor }}
+                            style={{ color: design.components?.bodyColor }}
                           />
                         )}
                         {design.components?.body && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.body)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
                             }}
-                            style={{ color: design.components.bodyColor }}
+                            style={{ color: design.components?.bodyColor }}
                           />
                         )}
                         {design.components?.ears && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.ears)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
                             }}
-                            style={{ color: design.components.bodyColor }}
+                            style={{ color: design.components?.bodyColor }}
                           />
                         )}
                         {design.components?.eyes && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.eyes)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
                             }}
                           />
                         )}
                         {design.components?.nose && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.nose)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
                             }}
                           />
                         )}
                         {design.components?.mouth && (
                           <g
                             dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components.mouth)?.svg_data || "",
+                              __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
                             }}
                           />
                         )}
@@ -225,7 +225,7 @@ export default function ProfilePage() {
                           <g
                             dangerouslySetInnerHTML={{
                               __html:
-                                mockComponents.find((c) => c.id === design.components.accessories)?.svg_data || "",
+                                mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
                             }}
                           />
                         )}
