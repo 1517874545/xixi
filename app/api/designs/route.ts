@@ -18,6 +18,23 @@ const supabase = createClient(
   supabaseKey || 'example-key'
 )
 
+// 定义全局类型
+interface MockDesign {
+  id: string;
+  title: string;
+  components: Record<string, string>;
+  is_public: boolean;
+  user_id: string | null;
+  created_at: string;
+  updated_at: string;
+  likes_count?: number;
+  comments_count?: number;
+}
+
+declare global {
+  var mockDesigns: MockDesign[] | undefined;
+}
+
 export async function GET(request: NextRequest) {
   try {
     console.log('GET /api/designs called')
@@ -28,7 +45,7 @@ export async function GET(request: NextRequest) {
     
     console.log('Query parameters:', { isPublic, userId })
     
-    let allDesigns = []
+    let allDesigns: MockDesign[] = []
     
     // 构建查询条件
     let query = supabase
@@ -81,7 +98,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 检查是否有内存中的模拟设计
-    const mockDesigns = globalThis.mockDesigns || []
+    const mockDesigns = global.mockDesigns || []
     console.log('Found mock designs:', mockDesigns.length)
     
     // 根据参数过滤模拟设计
@@ -212,8 +229,8 @@ export async function POST(request: NextRequest) {
       }
       
       // 将模拟设计存储到内存中，以便GET可以返回它
-      globalThis.mockDesigns = globalThis.mockDesigns || []
-      globalThis.mockDesigns.push(mockDesign)
+      global.mockDesigns = global.mockDesigns || []
+      global.mockDesigns.push(mockDesign)
       
       console.log('Mock design created and stored:', mockDesign)
       return NextResponse.json({ design: mockDesign }, { status: 201 })
@@ -238,8 +255,8 @@ export async function POST(request: NextRequest) {
     }
     
     // 存储模拟设计
-    globalThis.mockDesigns = globalThis.mockDesigns || []
-    globalThis.mockDesigns.push(mockDesign)
+    global.mockDesigns = global.mockDesigns || []
+    global.mockDesigns.push(mockDesign)
     
     return NextResponse.json({ design: mockDesign }, { status: 201 })
   }

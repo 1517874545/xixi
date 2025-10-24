@@ -17,10 +17,10 @@ const supabase = createClient(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const designId = params.id
+    const { id: designId } = await params
     console.log('GET /api/designs/[id] called for design:', designId)
 
     // 首先尝试从数据库查询设计
@@ -57,12 +57,25 @@ export async function GET(
     console.log('Design not found in database, checking mock designs...')
     
     // 如果数据库中没有找到，检查内存中的模拟设计
-    const mockDesigns = (globalThis as any).mockDesigns || []
+    const mockDesigns = global.mockDesigns || []
     const mockDesign = mockDesigns.find((d: any) => d.id === designId)
     
     if (mockDesign) {
       console.log('Found design in mock designs:', mockDesign.id)
       return NextResponse.json({ design: mockDesign })
+    }
+
+    // 如果全局mock数据中没有找到，检查导入的mock数据
+    try {
+      const { mockDesigns: importedMockDesigns } = await import('@/lib/mock-data')
+      const importedMockDesign = importedMockDesigns.find((d: any) => d.id === designId)
+      
+      if (importedMockDesign) {
+        console.log('Found design in imported mock designs:', importedMockDesign.id)
+        return NextResponse.json({ design: importedMockDesign })
+      }
+    } catch (importError) {
+      console.log('Failed to import mock designs:', importError)
     }
 
     console.log('Design not found anywhere:', designId)
@@ -75,10 +88,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const designId = params.id
+    const { id: designId } = await params
     const body = await request.json()
     const { title, components, is_public } = body
 
@@ -130,19 +143,19 @@ export async function PUT(
       
       // 如果所有数据库操作都失败，尝试更新内存中的模拟设计
       console.log('Attempting to update mock design...')
-      if (globalThis.mockDesigns) {
-        const mockDesignIndex = globalThis.mockDesigns.findIndex((d: any) => d.id === designId)
+      if (global.mockDesigns) {
+        const mockDesignIndex = global.mockDesigns.findIndex((d: any) => d.id === designId)
         
         if (mockDesignIndex !== -1) {
           const updatedMockDesign = {
-            ...globalThis.mockDesigns[mockDesignIndex],
+            ...global.mockDesigns[mockDesignIndex],
             ...(title !== undefined && { title }),
             ...(components !== undefined && { components }),
             ...(is_public !== undefined && { is_public }),
             updated_at: new Date().toISOString()
           }
           
-          globalThis.mockDesigns[mockDesignIndex] = updatedMockDesign
+          global.mockDesigns[mockDesignIndex] = updatedMockDesign
           console.log('Mock design updated:', updatedMockDesign)
           return NextResponse.json({ design: updatedMockDesign })
         }
@@ -159,23 +172,23 @@ export async function PUT(
     console.error('PUT /api/designs/[id] error:', error)
     
     // 尝试更新内存中的模拟设计作为最后的备选方案
-    if (globalThis.mockDesigns) {
-      const designId = params.id
+    if (global.mockDesigns) {
+      const { id: designId } = await params
       const body = await request.json()
       const { title, components, is_public } = body
       
-      const mockDesignIndex = globalThis.mockDesigns.findIndex((d: any) => d.id === designId)
+      const mockDesignIndex = global.mockDesigns.findIndex((d: any) => d.id === designId)
       
       if (mockDesignIndex !== -1) {
         const updatedMockDesign = {
-          ...globalThis.mockDesigns[mockDesignIndex],
+          ...global.mockDesigns[mockDesignIndex],
           ...(title !== undefined && { title }),
           ...(components !== undefined && { components }),
           ...(is_public !== undefined && { is_public }),
           updated_at: new Date().toISOString()
         }
         
-        globalThis.mockDesigns[mockDesignIndex] = updatedMockDesign
+        global.mockDesigns[mockDesignIndex] = updatedMockDesign
         console.log('Mock design updated as fallback:', updatedMockDesign)
         return NextResponse.json({ design: updatedMockDesign })
       }
@@ -187,10 +200,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const designId = params.id
+    const { id: designId } = await params
     console.log('DELETE /api/designs/[id] called for design:', designId)
 
     // 首先尝试从数据库删除设计（不检查用户权限，因为当前没有用户认证）
@@ -224,8 +237,8 @@ export async function DELETE(
               console.log('Design deleted successfully with service key')
               
               // 同时从内存中删除模拟设计
-              if (globalThis.mockDesigns) {
-                globalThis.mockDesigns = globalThis.mockDesigns.filter((d: any) => d.id !== designId)
+              if (global.mockDesigns) {
+                global.mockDesigns = global.mockDesigns.filter((d: any) => d.id !== designId)
               }
               
               return NextResponse.json({ message: 'Design deleted successfully' })
@@ -238,11 +251,11 @@ export async function DELETE(
       
       // 如果所有数据库操作都失败，尝试从内存中删除模拟设计
       console.log('Attempting to delete from mock designs...')
-      if (globalThis.mockDesigns) {
-        const initialLength = globalThis.mockDesigns.length
-        globalThis.mockDesigns = globalThis.mockDesigns.filter((d: any) => d.id !== designId)
+      if (global.mockDesigns) {
+        const initialLength = global.mockDesigns.length
+        global.mockDesigns = global.mockDesigns.filter((d: any) => d.id !== designId)
         
-        if (globalThis.mockDesigns.length < initialLength) {
+        if (global.mockDesigns.length < initialLength) {
           console.log('Design deleted from mock designs')
           return NextResponse.json({ message: 'Design deleted successfully' })
         }
@@ -254,8 +267,8 @@ export async function DELETE(
     }
 
     // 同时从内存中删除模拟设计（如果存在）
-    if (globalThis.mockDesigns) {
-      globalThis.mockDesigns = globalThis.mockDesigns.filter((d: any) => d.id !== designId)
+    if (global.mockDesigns) {
+      global.mockDesigns = global.mockDesigns.filter((d: any) => d.id !== designId)
     }
 
     console.log('Design deleted successfully from database')
@@ -264,12 +277,12 @@ export async function DELETE(
     console.error('DELETE /api/designs/[id] error:', error)
     
     // 尝试从内存中删除作为最后的备选方案
-    if (globalThis.mockDesigns) {
-      const designId = params.id
-      const initialLength = globalThis.mockDesigns.length
-      globalThis.mockDesigns = globalThis.mockDesigns.filter((d: any) => d.id !== designId)
+    if (global.mockDesigns) {
+      const { id: designId } = await params
+      const initialLength = global.mockDesigns.length
+      global.mockDesigns = global.mockDesigns.filter((d: any) => d.id !== designId)
       
-      if (globalThis.mockDesigns.length < initialLength) {
+      if (global.mockDesigns.length < initialLength) {
         console.log('Design deleted from mock designs as fallback')
         return NextResponse.json({ message: 'Design deleted successfully' })
       }

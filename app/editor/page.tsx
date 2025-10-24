@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { mockComponents, type Component, type Design } from "@/lib/mock-data"
+import { mockComponents, mockUser, type Component, type Design } from "@/lib/mock-data"
 import { Save, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { designsApi, componentsApi } from "@/lib/api"
@@ -122,7 +122,18 @@ export default function EditorPage() {
 
     const design = {
       title,
-      components: { ...selectedComponents, bodyColor: colors.body },
+      user_id: mockUser.id, // 添加用户ID
+      components: { 
+        body: selectedComponents.body || '',
+        ears: selectedComponents.ears || '',
+        eyes: selectedComponents.eyes || '',
+        nose: selectedComponents.nose || '',
+        mouth: selectedComponents.mouth || '',
+        accessories: selectedComponents.accessories || '',
+        background: selectedComponents.background || '',
+        bodyColor: colors.body,
+        ...selectedComponents
+      },
       is_public: false,
     }
 

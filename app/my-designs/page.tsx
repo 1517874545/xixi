@@ -38,7 +38,48 @@ export default function MyDesignsPage() {
       setLoading(true)
       // 加载所有设计（包括公开和私有）
       const userDesigns = await designsApi.getAll()
-      setDesigns(userDesigns)
+      
+      // 从本地存储中获取最新的点赞和评论数据
+      if (typeof window !== 'undefined') {
+        try {
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+          const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+          
+          // 更新设计数据，优先使用本地存储的数据
+          const updatedDesigns = userDesigns.map(design => {
+            const savedDesign = savedDesigns.find((d: any) => d.id === design.id)
+            
+            // 计算实际的点赞数（基于本地存储的点赞数据）
+            const actualLikesCount = savedLikes.filter((id: string) => id === design.id).length
+            
+            // 计算实际的评论数（基于本地存储的评论数据）
+            const actualCommentsCount = savedComments.filter((c: any) => c.design_id === design.id).length
+            
+            if (savedDesign) {
+              return {
+                ...design,
+                likes_count: Math.max(actualLikesCount, savedDesign.likes_count || 0),
+                comments_count: Math.max(actualCommentsCount, savedDesign.comments_count || 0)
+              }
+            }
+            
+            // 即使没有保存的设计数据，也要使用本地存储的点赞和评论数
+            return {
+              ...design,
+              likes_count: Math.max(actualLikesCount, design.likes_count || 0),
+              comments_count: Math.max(actualCommentsCount, design.comments_count || 0)
+            }
+          })
+          
+          setDesigns(updatedDesigns)
+        } catch (localError) {
+          console.error('Failed to load local data:', localError)
+          setDesigns(userDesigns)
+        }
+      } else {
+        setDesigns(userDesigns)
+      }
     } catch (error) {
       console.error('Failed to load designs:', error)
       toast({

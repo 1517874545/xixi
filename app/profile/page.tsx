@@ -4,12 +4,11 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { mockUser, mockComponents, type Design } from "@/lib/mock-data"
+import { mockUser, mockComponents, mockDesigns, type Design } from "@/lib/mock-data"
 import { User, Heart } from "lucide-react"
 import { designsApi, likesApi } from "@/lib/api"
 
 export default function ProfilePage() {
-  const [myDesigns, setMyDesigns] = useState<Design[]>([])
   const [likedDesigns, setLikedDesigns] = useState<Design[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -20,18 +19,62 @@ export default function ProfilePage() {
   const loadProfileData = async () => {
     try {
       setLoading(true)
-      
-      // Load user's designs (using mock user ID for now)
-      const userDesigns = await designsApi.getAll({ userId: mockUser.id })
-      setMyDesigns(userDesigns)
 
-      // Load liked designs
-      const likedDesigns = await likesApi.getUserLikes()
+      // 获取喜欢的作品ID - 优先使用本地存储，因为API返回的是固定模拟数据
+      let likedDesignIds: string[] = []
+      try {
+        // 首先尝试从本地存储获取
+        if (typeof window !== 'undefined') {
+          likedDesignIds = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+        }
+        
+        // 如果本地存储为空，再尝试从API获取（获取模拟数据）
+        if (likedDesignIds.length === 0) {
+          const apiLikes = await likesApi.getUserLikes(mockUser.id)
+          likedDesignIds = apiLikes
+        }
+      } catch (error) {
+        console.error('Failed to load likes:', error)
+        likedDesignIds = []
+      }
+      
+      console.log('Liked design IDs:', likedDesignIds)
+      
+      // 获取完整的设计对象
+      const likedDesignsPromises = likedDesignIds.map(id => {
+        return designsApi.getById(id).catch(() => {
+          // 如果API获取失败，尝试从模拟数据中查找
+          const mockDesign = mockDesigns.find(d => d.id === id)
+          if (mockDesign) {
+            console.log('Found mock design:', id)
+            return mockDesign
+          }
+          
+          // 尝试从本地存储的设计中查找
+          try {
+            const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+            const savedDesign = savedDesigns.find((d: Design) => d.id === id)
+            if (savedDesign) {
+              console.log('Found saved design:', id)
+              return savedDesign
+            }
+          } catch {
+            // 忽略错误
+          }
+          
+          console.log('Design not found:', id)
+          return null
+        })
+      })
+      
+      const likedDesignsResults = await Promise.all(likedDesignsPromises)
+      const likedDesigns = likedDesignsResults.filter(Boolean) as Design[]
+      
+      console.log('Loaded liked designs:', likedDesigns.length)
       setLikedDesigns(likedDesigns)
     } catch (error) {
       console.error('Failed to load profile data:', error)
       // Fallback to empty arrays on error
-      setMyDesigns([])
       setLikedDesigns([])
     } finally {
       setLoading(false)
@@ -68,104 +111,8 @@ export default function ProfilePage() {
           </div>
         </Card>
 
-        {/* Tabs */}
-        <Tabs defaultValue="designs" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="designs" className="gap-2">
-              <User className="h-4 w-4" />
-              My Designs
-            </TabsTrigger>
-            <TabsTrigger value="liked" className="gap-2">
-              <Heart className="h-4 w-4" />
-              Liked
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="designs" className="mt-6">
-            {myDesigns.length === 0 ? (
-              <Card className="p-12 text-center">
-                <p className="text-muted-foreground">No designs yet. Start creating!</p>
-              </Card>
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {myDesigns.map((design) => (
-                  <Link key={design.id} href={`/design/${design.id}`}>
-                    <Card className="p-4 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]">
-                      <svg viewBox="0 0 300 300" className="w-full h-48 mb-4 bg-muted rounded-lg">
-                        {design.components?.background && (
-                          <g
-                            dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
-                            }}
-                            style={{ color: design.components?.bodyColor }}
-                          />
-                        )}
-                        {design.components?.body && (
-                          <g
-                            dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
-                            }}
-                            style={{ color: design.components?.bodyColor }}
-                          />
-                        )}
-                        {design.components?.ears && (
-                          <g
-                            dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
-                            }}
-                            style={{ color: design.components?.bodyColor }}
-                          />
-                        )}
-                        {design.components?.eyes && (
-                          <g
-                            dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
-                            }}
-                          />
-                        )}
-                        {design.components?.nose && (
-                          <g
-                            dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
-                            }}
-                          />
-                        )}
-                        {design.components?.mouth && (
-                          <g
-                            dangerouslySetInnerHTML={{
-                              __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
-                            }}
-                          />
-                        )}
-                        {design.components?.accessories && (
-                          <g
-                            dangerouslySetInnerHTML={{
-                              __html:
-                                mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
-                            }}
-                          />
-                        )}
-                      </svg>
-                      <div>
-                        <h3 className="font-semibold mb-1">{design.title}</h3>
-                        <div className="flex items-center justify-between text-sm text-muted-foreground">
-                          <span>{new Date(design.created_at).toLocaleDateString()}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="flex items-center gap-1">
-                              <Heart className="h-3 w-3" />
-                              {design.likes_count || 0}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="liked" className="mt-6">
+        {/* Liked Designs */}
+        <div className="mt-6">
             {likedDesigns.length === 0 ? (
               <Card className="p-12 text-center">
                 <p className="text-muted-foreground">No liked designs yet. Explore the gallery!</p>
@@ -239,8 +186,7 @@ export default function ProfilePage() {
                 ))}
               </div>
             )}
-          </TabsContent>
-        </Tabs>
+        </div>
       </div>
     </div>
   )

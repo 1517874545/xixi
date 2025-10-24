@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
 
     // 创建评论数据
     const commentData = {
+      id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       design_id,
       content,
       user_id: null, // 暂时没有用户认证

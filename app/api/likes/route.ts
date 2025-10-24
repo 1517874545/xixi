@@ -15,22 +15,6 @@ const supabase = createClient(
   supabaseKey || 'example-key'
 )
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { design_id } = body
-
-    // TODO: Implement proper authentication
-    // For now, simulate like functionality without user tracking
-    return NextResponse.json({ 
-      liked: true,
-      message: 'Like functionality will be available after authentication implementation'
-    })
-  } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
@@ -38,28 +22,43 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId')
 
     if (userId) {
-      // 对于匿名用户，返回空数组（因为没有用户认证）
-      // 在实际应用中，这里应该使用真实的用户ID
-      return NextResponse.json({ likedDesigns: [] })
+      // 模拟用户喜欢的作品数据
+      // 在实际应用中，这里应该查询数据库
+      const mockLikedDesigns = ["design1", "design2", "design3"] // 模拟用户喜欢的作品ID
+      return NextResponse.json({ likedDesigns: mockLikedDesigns })
     }
 
     if (designId) {
-      // Check if design exists and return basic like info
-      const { data: design } = await supabase
-        .from('designs')
-        .select('id')
-        .eq('id', designId)
-        .single()
-
-      if (design) {
-        // Return false for now since we don't have user tracking
-        return NextResponse.json({ liked: false })
-      } else {
-        return NextResponse.json({ error: 'Design not found' }, { status: 404 })
-      }
+      // 模拟检查用户是否喜欢该作品
+      // 在实际应用中，这里应该查询数据库
+      const mockLiked = Math.random() > 0.5 // 随机返回true或false
+      return NextResponse.json({ liked: mockLiked })
     }
 
+    // 如果既没有userId也没有designId，返回错误
     return NextResponse.json({ error: 'designId or userId parameter is required' }, { status: 400 })
+  } catch (error) {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { design_id } = body
+
+    if (!design_id) {
+      return NextResponse.json({ error: 'design_id is required' }, { status: 400 })
+    }
+
+    // 模拟点赞/取消点赞操作
+    // 在实际应用中，这里应该操作数据库
+    const mockLiked = Math.random() > 0.5 // 随机返回true或false
+    
+    return NextResponse.json({ 
+      liked: mockLiked,
+      message: mockLiked ? 'Liked successfully' : 'Unliked successfully'
+    })
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

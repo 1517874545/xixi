@@ -10,9 +10,9 @@ import { LikeButton } from "@/components/like-button"
 import { CommentSection } from "@/components/comment-section"
 import { FollowButton } from "@/components/follow-button"
 import { useAuth } from "@/lib/auth-context"
-import { ArrowLeft, Share2, Edit, User, Calendar } from "lucide-react"
+import { ArrowLeft, Share2, Edit, User, Calendar, MessageCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { designsApi } from "@/lib/api"
+import { designsApi, commentsApi } from "@/lib/api"
 
 export default function DesignDetailPage() {
   const params = useParams()
@@ -22,6 +22,7 @@ export default function DesignDetailPage() {
   const [design, setDesign] = useState<Design | null>(null)
   const [isLiked, setIsLiked] = useState(false)
   const [comments, setComments] = useState<any[]>([])
+  const [currentLikesCount, setCurrentLikesCount] = useState(0)
 
   useEffect(() => {
     const designId = params.id as string
@@ -31,7 +32,36 @@ export default function DesignDetailPage() {
         // 首先尝试从API获取设计
         const foundDesign = await designsApi.getById(designId)
         if (foundDesign) {
+          // 从本地存储获取最新的点赞和评论数据
+          if (typeof window !== 'undefined') {
+            try {
+              const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+              const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+              const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+              
+              // 计算实际的点赞数
+              const actualLikesCount = savedLikes.filter((id: string) => id === designId).length
+              
+              // 计算实际的评论数
+              const actualCommentsCount = savedComments.filter((c: any) => c.design_id === designId).length
+              
+              // 更新设计数据
+              const updatedDesign = {
+                ...foundDesign,
+                likes_count: Math.max(actualLikesCount, foundDesign.likes_count || 0),
+                comments_count: Math.max(actualCommentsCount, foundDesign.comments_count || 0)
+              }
+              
+              setDesign(updatedDesign)
+              setCurrentLikesCount(updatedDesign.likes_count || 0)
+              return
+            } catch (localError) {
+              console.error('Failed to load local data:', localError)
+            }
+          }
+          
           setDesign(foundDesign)
+          setCurrentLikesCount(foundDesign.likes_count || 0)
           return
         }
       } catch (error) {
@@ -43,24 +73,86 @@ export default function DesignDetailPage() {
         const foundDesign = allDesigns.find((d: Design) => d.id === designId)
 
         if (foundDesign) {
-          setDesign(foundDesign)
+          // 从本地存储获取最新的点赞和评论数据
+          if (typeof window !== 'undefined') {
+            try {
+              const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+              const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+              
+              // 计算实际的点赞数
+              const actualLikesCount = savedLikes.filter((id: string) => id === designId).length
+              
+              // 计算实际的评论数
+              const actualCommentsCount = savedComments.filter((c: any) => c.design_id === designId).length
+              
+              // 更新设计数据
+              const updatedDesign = {
+                ...foundDesign,
+                likes_count: Math.max(actualLikesCount, foundDesign.likes_count || 0),
+                comments_count: Math.max(actualCommentsCount, foundDesign.comments_count || 0)
+              }
+              
+              setDesign(updatedDesign)
+              setCurrentLikesCount(updatedDesign.likes_count || 0)
+            } catch (localError) {
+              console.error('Failed to load local data:', localError)
+              setDesign(foundDesign)
+              setCurrentLikesCount(foundDesign.likes_count || 0)
+            }
+          } else {
+            setDesign(foundDesign)
+            setCurrentLikesCount(foundDesign.likes_count || 0)
+          }
         }
       }
     }
 
-    loadDesign()
+    const loadComments = async () => {
+      try {
+        // 首先尝试从本地存储获取评论
+        if (typeof window !== 'undefined') {
+          try {
+            const allComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+            const designComments = [
+              ...mockComments.filter((c) => c.design_id === designId),
+              ...allComments.filter((c: any) => c.design_id === designId),
+            ]
+            setComments(designComments)
+            return
+          } catch (localError) {
+            console.error('Failed to load comments from localStorage:', localError)
+          }
+        }
+        
+        // 如果本地存储没有，尝试从API获取
+        const fetchedComments = await commentsApi.getByDesign(designId)
+        setComments(fetchedComments)
+      } catch (error) {
+        console.error('Failed to load comments:', error)
+        // Fallback to local storage and mock data
+        const allComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+        const designComments = [
+          ...mockComments.filter((c) => c.design_id === designId),
+          ...allComments.filter((c: any) => c.design_id === designId),
+        ]
+        setComments(designComments)
+      }
+    }
 
-    // Load likes
-    const likes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
-    setIsLiked(likes.includes(designId))
+    const loadData = async () => {
+      await loadDesign()
+      
+      // Load likes
+      if (typeof window !== 'undefined') {
+        const likes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+        setIsLiked(likes.includes(designId))
+      }
+      
+      // Load comments
+      await loadComments()
+    }
 
-    // Load comments
-    const allComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
-    const designComments = [
-      ...mockComments.filter((c) => c.design_id === designId),
-      ...allComments.filter((c: any) => c.design_id === designId),
-    ]
-    setComments(designComments)
+    loadData()
   }, [params.id])
 
   const handleShare = () => {
@@ -223,13 +315,43 @@ export default function DesignDetailPage() {
 
             {/* Interactions */}
             <div className="flex items-center gap-4">
-              <LikeButton designId={design.id} initialLiked={isLiked} initialCount={design.likes_count || 0} />
+              <LikeButton 
+                designId={design.id} 
+                initialLiked={isLiked} 
+                initialCount={design.likes_count || 0} 
+                onCountUpdate={(count) => {
+                  setCurrentLikesCount(count)
+                  // 更新本地存储中的设计数据
+                  const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+                  const designIndex = savedDesigns.findIndex((d: Design) => d.id === design.id)
+                  if (designIndex !== -1) {
+                    savedDesigns[designIndex].likes_count = count
+                    localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
+                  }
+                }}
+              />
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <MessageCircle className="h-4 w-4" />
+                <span>{comments.length}</span>
+              </div>
             </div>
 
             {/* Comments Section */}
             <div>
               <h2 className="text-xl font-semibold mb-4">Comments</h2>
-              <CommentSection designId={design.id} initialComments={comments} />
+              <CommentSection 
+                designId={design.id} 
+                initialComments={comments} 
+                onCommentUpdate={(count) => {
+                  // 更新本地存储中的设计数据
+                  const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+                  const designIndex = savedDesigns.findIndex((d: Design) => d.id === design.id)
+                  if (designIndex !== -1) {
+                    savedDesigns[designIndex].comments_count = count
+                    localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
+                  }
+                }}
+              />
             </div>
           </div>
         </div>
