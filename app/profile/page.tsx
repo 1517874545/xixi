@@ -4,21 +4,82 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { mockUser, mockComponents, mockDesigns, type Design } from "@/lib/mock-data"
+import { mockComponents, mockDesigns, type Design } from "@/lib/mock-data"
 import { User, Heart } from "lucide-react"
 import { designsApi, likesApi } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 export default function ProfilePage() {
+  const { user } = useAuth()
   const [likedDesigns, setLikedDesigns] = useState<Design[]>([])
+  const [userDesigns, setUserDesigns] = useState<Design[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadProfileData()
-  }, [])
+    if (user) {
+      loadProfileData()
+    }
+  }, [user])
 
   const loadProfileData = async () => {
+    if (!user) return
+    
     try {
       setLoading(true)
+
+      // 获取所有设计作品 - 使用与my designs页面完全相同的逻辑
+      try {
+        // 加载所有设计（包括公开和私有）
+        const allDesigns = await designsApi.getAll()
+        
+        // 从本地存储中获取最新的点赞和评论数据
+        if (typeof window !== 'undefined') {
+          try {
+            const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+            const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+            const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+            
+            // 更新设计数据，优先使用本地存储的数据
+            const updatedDesigns = allDesigns.map(design => {
+              const savedDesign = savedDesigns.find((d: any) => d.id === design.id)
+              
+              // 计算实际的点赞数（基于本地存储的点赞数据）
+              const actualLikesCount = savedLikes.filter((id: string) => id === design.id).length
+              
+              // 计算实际的评论数（基于本地存储的评论数据）
+              const actualCommentsCount = savedComments.filter((c: any) => c.design_id === design.id).length
+              
+              if (savedDesign) {
+                return {
+                  ...design,
+                  likes_count: Math.max(actualLikesCount, savedDesign.likes_count || 0),
+                  comments_count: Math.max(actualCommentsCount, savedDesign.comments_count || 0)
+                }
+              }
+              
+              // 即使没有保存的设计数据，也要使用本地存储的点赞和评论数
+              return {
+                ...design,
+                likes_count: Math.max(actualLikesCount, design.likes_count || 0),
+                comments_count: Math.max(actualCommentsCount, design.comments_count || 0)
+              }
+            })
+            
+            // 直接设置所有设计作品，与my designs页面保持一致
+            setUserDesigns(updatedDesigns)
+          } catch (localError) {
+            console.error('Failed to load local data:', localError)
+            // 如果本地存储加载失败，使用API数据
+            setUserDesigns(allDesigns)
+          }
+        } else {
+          // SSR环境，直接使用API数据
+          setUserDesigns(allDesigns)
+        }
+      } catch (error) {
+        console.error('Failed to load user designs:', error)
+        setUserDesigns([])
+      }
 
       // 获取喜欢的作品ID - 优先使用本地存储，因为API返回的是固定模拟数据
       let likedDesignIds: string[] = []
@@ -30,7 +91,7 @@ export default function ProfilePage() {
         
         // 如果本地存储为空，再尝试从API获取（获取模拟数据）
         if (likedDesignIds.length === 0) {
-          const apiLikes = await likesApi.getUserLikes(mockUser.id)
+          const apiLikes = await likesApi.getUserLikes(user.id)
           likedDesignIds = apiLikes
         }
       } catch (error) {
@@ -76,6 +137,7 @@ export default function ProfilePage() {
       console.error('Failed to load profile data:', error)
       // Fallback to empty arrays on error
       setLikedDesigns([])
+      setUserDesigns([])
     } finally {
       setLoading(false)
     }
@@ -91,20 +153,30 @@ export default function ProfilePage() {
               <User className="h-12 w-12 text-primary" />
             </div>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold mb-2">{mockUser.name}</h1>
-              <p className="text-muted-foreground mb-4">{mockUser.email}</p>
+              <h1 className="text-2xl font-bold mb-2">{user?.name || user?.email?.split('@')[0] || 'User'}</h1>
+              <p className="text-muted-foreground mb-4">{user?.email || 'No email'}</p>
               <div className="flex gap-6 text-sm">
                 <div>
-                  <span className="font-semibold">{mockUser.designs_count}</span>
+                  <span className="font-semibold">{userDesigns.length}</span>
                   <span className="text-muted-foreground ml-1">Designs</span>
                 </div>
                 <div>
-                  <span className="font-semibold">{mockUser.followers_count}</span>
-                  <span className="text-muted-foreground ml-1">Followers</span>
+                  <span className="font-semibold">
+                    {userDesigns.reduce((sum, d) => sum + (d.likes_count || 0), 0)}
+                  </span>
+                  <span className="text-muted-foreground ml-1">Total Likes</span>
                 </div>
                 <div>
-                  <span className="font-semibold">{mockUser.following_count}</span>
-                  <span className="text-muted-foreground ml-1">Following</span>
+                  <span className="font-semibold">
+                    {userDesigns.reduce((sum, d) => sum + (d.comments_count || 0), 0)}
+                  </span>
+                  <span className="text-muted-foreground ml-1">Total Comments</span>
+                </div>
+                <div>
+                  <span className="font-semibold">
+                    {userDesigns.filter(d => d.is_public).length}
+                  </span>
+                  <span className="text-muted-foreground ml-1">Public Designs</span>
                 </div>
               </div>
             </div>

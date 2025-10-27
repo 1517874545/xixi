@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { mockComponents, mockDesigns, mockComments, type Design } from "@/lib/mock-data"
 import { LikeButton } from "@/components/like-button"
 import { CommentSection } from "@/components/comment-section"
-import { FollowButton } from "@/components/follow-button"
 import { useAuth } from "@/lib/auth-context"
 import { ArrowLeft, Share2, Edit, User, Calendar, MessageCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -296,7 +295,7 @@ export default function DesignDetailPage() {
               </div>
 
               {/* Creator Info */}
-              <div className="flex items-center justify-between py-4 border-y">
+              <div className="flex items-center py-4 border-y">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
                     <User className="h-5 w-5 text-primary" />
@@ -309,7 +308,6 @@ export default function DesignDetailPage() {
                     </div>
                   </div>
                 </div>
-                {!isOwner && design.user_id !== "user1" && <FollowButton userId={design.user_id} />}
               </div>
             </div>
 
