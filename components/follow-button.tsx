@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { UserPlus, UserMinus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -11,7 +11,20 @@ interface FollowButtonProps {
 }
 
 export function FollowButton({ userId, initialFollowing = false, onFollowChange }: FollowButtonProps) {
-  const [following, setFollowing] = useState(initialFollowing)
+  const [following, setFollowing] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    // 在客户端初始化状态，确保与服务器渲染一致
+    if (typeof window !== 'undefined') {
+      const follows = JSON.parse(localStorage.getItem("petcraft_follows") || "[]")
+      const isFollowing = follows.includes(userId)
+      setFollowing(isFollowing)
+    } else {
+      setFollowing(initialFollowing)
+    }
+  }, [userId, initialFollowing])
 
   const handleFollow = () => {
     const newFollowing = !following
@@ -30,6 +43,16 @@ export function FollowButton({ userId, initialFollowing = false, onFollowChange 
     }
 
     onFollowChange?.(newFollowing)
+  }
+
+  // 避免 SSR 和客户端渲染不匹配
+  if (!mounted) {
+    return (
+      <Button variant="default" size="sm" className="gap-2 opacity-0">
+        <UserPlus className="h-4 w-4" />
+        Follow
+      </Button>
+    )
   }
 
   return (
