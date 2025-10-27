@@ -17,15 +17,17 @@ export function FollowButton({ userId, initialFollowing = false, onFollowChange 
     const newFollowing = !following
     setFollowing(newFollowing)
 
-    // Store in localStorage
-    const follows = JSON.parse(localStorage.getItem("petcraft_follows") || "[]")
-    if (newFollowing) {
-      follows.push(userId)
-    } else {
-      const index = follows.indexOf(userId)
-      if (index > -1) follows.splice(index, 1)
+    // Store in localStorage (client-side only)
+    if (typeof window !== 'undefined') {
+      const follows = JSON.parse(localStorage.getItem("petcraft_follows") || "[]")
+      if (newFollowing) {
+        follows.push(userId)
+      } else {
+        const index = follows.indexOf(userId)
+        if (index > -1) follows.splice(index, 1)
+      }
+      localStorage.setItem("petcraft_follows", JSON.stringify(follows))
     }
-    localStorage.setItem("petcraft_follows", JSON.stringify(follows))
 
     onFollowChange?.(newFollowing)
   }
