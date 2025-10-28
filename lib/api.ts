@@ -105,11 +105,8 @@ export const designsApi = {
   },
 
   async update(id: string, updates: Partial<Design>): Promise<Design> {
-    const response = await fetch(`${API_BASE_URL}/designs/${id}`, {
+    const response = await fetchWithAuth(`${API_BASE_URL}/designs/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(updates),
     })
     if (!response.ok) {
@@ -120,11 +117,39 @@ export const designsApi = {
   },
 
   async delete(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/designs/${id}`, {
+    const response = await fetchWithAuth(`${API_BASE_URL}/designs/${id}`, {
       method: 'DELETE',
     })
-    if (!response.ok) {
-      throw new Error('Failed to delete design')
+    
+    // 处理响应
+    if (response.ok) {
+      // 尝试解析响应内容
+      try {
+        const result = await response.json()
+        if (result.success === false) {
+          throw new Error('Delete operation failed')
+        }
+        // 如果success为true或未定义，都认为是成功的
+        return
+      } catch {
+        // 如果响应不是JSON，但状态码是200-299，也认为是成功的
+        return
+      }
+    }
+    
+    // 处理错误响应
+    if (response.status === 404) {
+      // 404表示设计不存在，但这也算删除成功（目标已经达成）
+      console.log('Design not found (404), but considering delete operation successful')
+      return
+    }
+    
+    // 尝试解析错误信息
+    try {
+      const errorData = await response.json()
+      throw new Error(errorData.error || `Failed to delete design (${response.status})`)
+    } catch {
+      throw new Error(`Failed to delete design (${response.status})`)
     }
   }
 }

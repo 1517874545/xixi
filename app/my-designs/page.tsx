@@ -36,35 +36,47 @@ export default function MyDesignsPage() {
   const loadDesigns = async () => {
     try {
       setLoading(true)
-      // 加载所有设计（包括公开和私有）
-      const userDesigns = await designsApi.getAll()
+      
+      // 获取当前用户ID
+      const currentUser = user?.id || 'demo-user'
+      
+      // 首先检查本地存储是否有最新数据
+      let latestDesigns = []
+      if (typeof window !== 'undefined') {
+        try {
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const userSavedDesigns = savedDesigns.filter((d: any) => d.user_id === currentUser)
+          if (userSavedDesigns.length > 0) {
+            latestDesigns = userSavedDesigns
+            console.log('Loaded designs from localStorage:', latestDesigns.length)
+          }
+        } catch (localError) {
+          console.error('Failed to load from localStorage:', localError)
+        }
+      }
+      
+      // 加载当前用户的所有设计
+      const userDesigns = await designsApi.getAll({ userId: currentUser })
+      
+      console.log('Loaded designs from API:', userDesigns.length)
+      
+      // 合并API数据和本地存储数据，优先使用最新的数据
+      const mergedDesigns = mergeDesigns(userDesigns, latestDesigns)
       
       // 从本地存储中获取最新的点赞和评论数据
       if (typeof window !== 'undefined') {
         try {
-          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
           const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
           const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
           
-          // 更新设计数据，优先使用本地存储的数据
-          const updatedDesigns = userDesigns.map(design => {
-            const savedDesign = savedDesigns.find((d: any) => d.id === design.id)
-            
+          // 更新设计数据，使用本地存储的点赞和评论数据
+          const updatedDesigns = mergedDesigns.map(design => {
             // 计算实际的点赞数（基于本地存储的点赞数据）
             const actualLikesCount = savedLikes.filter((id: string) => id === design.id).length
             
             // 计算实际的评论数（基于本地存储的评论数据）
             const actualCommentsCount = savedComments.filter((c: any) => c.design_id === design.id).length
             
-            if (savedDesign) {
-              return {
-                ...design,
-                likes_count: Math.max(actualLikesCount, savedDesign.likes_count || 0),
-                comments_count: Math.max(actualCommentsCount, savedDesign.comments_count || 0)
-              }
-            }
-            
-            // 即使没有保存的设计数据，也要使用本地存储的点赞和评论数
             return {
               ...design,
               likes_count: Math.max(actualLikesCount, design.likes_count || 0),
@@ -75,18 +87,48 @@ export default function MyDesignsPage() {
           setDesigns(updatedDesigns)
         } catch (localError) {
           console.error('Failed to load local data:', localError)
-          setDesigns(userDesigns)
+          setDesigns(mergedDesigns)
         }
       } else {
-        setDesigns(userDesigns)
+        setDesigns(mergedDesigns)
       }
     } catch (error) {
       console.error('Failed to load designs:', error)
-      toast({
-        title: "Error",
-        description: "Failed to load your designs",
-        variant: "destructive"
-      })
+      
+      // 如果API调用失败，尝试从本地存储加载
+      if (typeof window !== 'undefined') {
+        try {
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const currentUser = user?.id || 'demo-user'
+          
+          // 只显示当前用户的设计
+          const userSavedDesigns = savedDesigns.filter((d: any) => d.user_id === currentUser)
+          
+          if (userSavedDesigns.length > 0) {
+            setDesigns(userSavedDesigns)
+            console.log('Loaded designs from localStorage:', userSavedDesigns.length)
+          } else {
+            toast({
+              title: "Error",
+              description: "Failed to load your designs",
+              variant: "destructive"
+            })
+          }
+        } catch (localError) {
+          console.error('Failed to load from localStorage:', localError)
+          toast({
+            title: "Error",
+            description: "Failed to load your designs",
+            variant: "destructive"
+          })
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load your designs",
+          variant: "destructive"
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -112,19 +154,87 @@ export default function MyDesignsPage() {
     setFilteredDesigns(filtered)
   }, [designs, sortBy, filterBy])
 
+  // 合并设计数据，优先使用最新的数据
+  const mergeDesigns = (apiDesigns: Design[], localDesigns: Design[]): Design[] => {
+    const mergedMap = new Map()
+    
+    // 首先添加API数据
+    apiDesigns.forEach(design => {
+      mergedMap.set(design.id, design)
+    })
+    
+    // 然后添加本地存储数据，覆盖API数据
+    localDesigns.forEach(design => {
+      mergedMap.set(design.id, design)
+    })
+    
+    // 按创建时间排序
+    return Array.from(mergedMap.values()).sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+  }
+
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this design?")) return
 
     try {
       await designsApi.delete(id)
+      
+      // 更新前端状态
       const updatedDesigns = designs.filter((d) => d.id !== id)
       setDesigns(updatedDesigns)
+      
+      // 同时清理本地存储中的数据
+      if (typeof window !== 'undefined') {
+        try {
+          // 清理设计数据
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const filteredDesigns = savedDesigns.filter((d: any) => d.id !== id)
+          localStorage.setItem("petcraft_designs", JSON.stringify(filteredDesigns))
+          
+          // 清理点赞数据
+          const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+          const filteredLikes = savedLikes.filter((likeId: string) => likeId !== id)
+          localStorage.setItem("petcraft_likes", JSON.stringify(filteredLikes))
+          
+          // 清理评论数据
+          const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+          const filteredComments = savedComments.filter((c: any) => c.design_id !== id)
+          localStorage.setItem("petcraft_comments", JSON.stringify(filteredComments))
+          
+          console.log('Cleaned up local storage data for design:', id)
+        } catch (localError) {
+          console.error('Failed to clean up local storage:', localError)
+        }
+      }
+      
       toast({
         title: "Design deleted",
         description: "Your design has been removed.",
       })
     } catch (error) {
       console.error('Failed to delete design:', error)
+      
+      // 如果API删除失败，尝试从本地存储中删除
+      if (typeof window !== 'undefined') {
+        try {
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const filteredDesigns = savedDesigns.filter((d: any) => d.id !== id)
+          localStorage.setItem("petcraft_designs", JSON.stringify(filteredDesigns))
+          
+          const updatedDesigns = designs.filter((d) => d.id !== id)
+          setDesigns(updatedDesigns)
+          
+          toast({
+            title: "Design removed locally",
+            description: "Design was removed from local storage.",
+          })
+          return
+        } catch (localError) {
+          console.error('Failed to delete from local storage:', localError)
+        }
+      }
+      
       toast({
         title: "Error",
         description: "Failed to delete design",
@@ -136,25 +246,86 @@ export default function MyDesignsPage() {
   const togglePublic = async (id: string) => {
     const design = designs.find((d) => d.id === id)
 
-    if (design && !design.is_public) {
+    if (!design) return
+
+    const newIsPublic = !design.is_public
+    
+    if (newIsPublic) {
+      // 设置为公开的确认
       if (!confirm("Make this design public? It will be visible to everyone in the community gallery.")) {
+        return
+      }
+    } else {
+      // 设置为私有的确认
+      if (!confirm("Make this design private? It will no longer be visible in the public gallery.")) {
         return
       }
     }
 
     try {
-      const updatedDesign = await designsApi.update(id, { is_public: !design?.is_public })
+      const updatedDesign = await designsApi.update(id, { is_public: newIsPublic })
       const updatedDesigns = designs.map((d) => (d.id === id ? updatedDesign : d))
       setDesigns(updatedDesigns)
 
+      // 更新本地存储
+      if (typeof window !== 'undefined') {
+        try {
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const existingIndex = savedDesigns.findIndex((d: any) => d.id === id)
+          
+          if (existingIndex !== -1) {
+            savedDesigns[existingIndex] = {
+              ...savedDesigns[existingIndex],
+              is_public: newIsPublic
+            }
+            localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
+          }
+        } catch (localError) {
+          console.error('Failed to update local storage:', localError)
+        }
+      }
+
       toast({
-        title: updatedDesign.is_public ? "Design published" : "Design unpublished",
-        description: updatedDesign.is_public
+        title: newIsPublic ? "Design published" : "Design unpublished",
+        description: newIsPublic
           ? "Your design is now visible in the public gallery."
           : "Your design is now private.",
       })
     } catch (error) {
       console.error('Failed to update design visibility:', error)
+      
+      // 如果API更新失败，尝试更新本地存储
+      if (typeof window !== 'undefined') {
+        try {
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const existingIndex = savedDesigns.findIndex((d: any) => d.id === id)
+          
+          if (existingIndex !== -1) {
+            savedDesigns[existingIndex] = {
+              ...savedDesigns[existingIndex],
+              is_public: newIsPublic
+            }
+            localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
+            
+            // 更新前端状态
+            const updatedDesigns = designs.map((d) => 
+              d.id === id ? { ...d, is_public: newIsPublic } : d
+            )
+            setDesigns(updatedDesigns)
+            
+            toast({
+              title: newIsPublic ? "Design published locally" : "Design unpublished locally",
+              description: newIsPublic
+                ? "Your design is now visible in the public gallery (local storage)."
+                : "Your design is now private (local storage).",
+            })
+            return
+          }
+        } catch (localError) {
+          console.error('Failed to update local storage:', localError)
+        }
+      }
+      
       toast({
         title: "Error",
         description: "Failed to update design visibility",

@@ -75,68 +75,7 @@ export const mockComponents: Component[] = [
   { id: "122", name: "Pattern BG", type: "background", svg_data: '<rect x="0" y="0" width="300" height="300" fill="#f8fafc"/><circle cx="75" cy="75" r="20" fill="#e2e8f0" opacity="0.3"/><circle cx="225" cy="225" r="20" fill="#e2e8f0" opacity="0.3"/>' },
 ]
 
-export const mockDesigns: Design[] = [
-  {
-    id: "design1",
-    title: "Sunny the Cat",
-    user_id: "user2",
-    user_name: "CatLover123",
-    components: {
-      body: "1",
-      ears: "20",
-      eyes: "40",
-      nose: "60",
-      mouth: "80",
-      accessories: "109",
-      background: "120",
-      bodyColor: "#fbbf24"
-    },
-    is_public: true,
-    created_at: "2024-01-15T10:30:00Z",
-    likes_count: 24,
-    comments_count: 5
-  },
-  {
-    id: "design2",
-    title: "Blue Buddy",
-    user_id: "user3",
-    user_name: "DogPerson",
-    components: {
-      body: "2",
-      ears: "21",
-      eyes: "41",
-      nose: "61",
-      mouth: "81",
-      accessories: "110",
-      background: "121",
-      bodyColor: "#3b82f6"
-    },
-    is_public: true,
-    created_at: "2024-01-16T14:20:00Z",
-    likes_count: 18,
-    comments_count: 3
-  },
-  {
-    id: "design3",
-    title: "Pink Princess",
-    user_id: "user4",
-    user_name: "PetArtist",
-    components: {
-      body: "3",
-      ears: "22",
-      eyes: "42",
-      nose: "62",
-      mouth: "82",
-      accessories: "111",
-      background: "122",
-      bodyColor: "#ec4899"
-    },
-    is_public: true,
-    created_at: "2024-01-17T09:15:00Z",
-    likes_count: 32,
-    comments_count: 8
-  }
-]
+export const mockDesigns: Design[] = []
 
 export const mockUser = {
   id: "user1",

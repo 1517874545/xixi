@@ -50,12 +50,15 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
   }, [designId, initialLiked, user?.id])
 
   const handleLike = async () => {
-    if (loading) return
+    if (loading || !user?.id) return
     
     setLoading(true)
     try {
-      // 直接使用本地状态切换，避免API返回随机值导致负数
-      const newLiked = !liked
+      // 先调用API，等待API返回结果
+      const result = await likesApi.toggle(designId, user.id)
+      
+      // 根据API返回的结果更新本地状态
+      const newLiked = result.liked
       const newCount = newLiked ? Math.max(0, count + 1) : Math.max(0, count - 1)
 
       setLiked(newLiked)
@@ -82,41 +85,10 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
       
       console.log('Like updated for design:', designId, 'Liked:', newLiked, 'Likes array:', currentLikes)
       
-      // 异步调用API，但不依赖其结果
-      if (user?.id) {
-        likesApi.toggle(designId, user.id).catch(error => {
-          console.error('API call failed but local state updated:', error)
-        })
-      }
-      
     } catch (error) {
       console.error('Failed to toggle like:', error)
-      // Fallback to local toggle on error
-      const newLiked = !liked
-      const newCount = newLiked ? Math.max(0, count + 1) : Math.max(0, count - 1)
-      setLiked(newLiked)
-      setCount(newCount)
-      onLikeChange?.(newLiked, newCount)
-      onCountUpdate?.(newCount)
-      
-      // 即使API失败，也保存到本地存储
-      let currentLikes = []
-      if (typeof window !== 'undefined') {
-        currentLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
-        if (newLiked) {
-          if (!currentLikes.includes(designId)) {
-            currentLikes.push(designId)
-          }
-        } else {
-          const index = currentLikes.indexOf(designId)
-          if (index > -1) {
-            currentLikes.splice(index, 1)
-          }
-        }
-        localStorage.setItem("petcraft_likes", JSON.stringify(currentLikes))
-      }
-      
-      console.log('Like fallback for design:', designId, 'Liked:', newLiked, 'Likes array:', currentLikes)
+      // API调用失败时，不更新本地状态，避免重复点赞
+      // 可以显示错误提示，但不改变点赞状态
     } finally {
       setLoading(false)
     }

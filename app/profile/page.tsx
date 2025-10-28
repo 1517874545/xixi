@@ -27,37 +27,46 @@ export default function ProfilePage() {
     try {
       setLoading(true)
 
-      // 获取所有设计作品 - 使用与my designs页面完全相同的逻辑
+      // 获取当前用户的设计作品 - 使用与my designs页面完全相同的逻辑
       try {
-        // 加载所有设计（包括公开和私有）
-        const allDesigns = await designsApi.getAll()
+        const currentUser = user?.id || 'demo-user'
+        
+        // 首先检查本地存储是否有最新数据
+        let latestDesigns = []
+        if (typeof window !== 'undefined') {
+          try {
+            const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+            const userSavedDesigns = savedDesigns.filter((d: any) => d.user_id === currentUser)
+            if (userSavedDesigns.length > 0) {
+              latestDesigns = userSavedDesigns
+              console.log('Loaded designs from localStorage:', latestDesigns.length)
+            }
+          } catch (localError) {
+            console.error('Failed to load from localStorage:', localError)
+          }
+        }
+        
+        // 加载当前用户的所有设计
+        const userDesignsFromApi = await designsApi.getAll({ userId: currentUser })
+        console.log('Loaded designs from API:', userDesignsFromApi.length)
+        
+        // 合并API数据和本地存储数据，优先使用最新的数据
+        const mergedDesigns = mergeDesigns(userDesignsFromApi, latestDesigns)
         
         // 从本地存储中获取最新的点赞和评论数据
         if (typeof window !== 'undefined') {
           try {
-            const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
             const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
             const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
             
-            // 更新设计数据，优先使用本地存储的数据
-            const updatedDesigns = allDesigns.map(design => {
-              const savedDesign = savedDesigns.find((d: any) => d.id === design.id)
-              
+            // 更新设计数据，使用本地存储的点赞和评论数据
+            const updatedDesigns = mergedDesigns.map(design => {
               // 计算实际的点赞数（基于本地存储的点赞数据）
               const actualLikesCount = savedLikes.filter((id: string) => id === design.id).length
               
               // 计算实际的评论数（基于本地存储的评论数据）
               const actualCommentsCount = savedComments.filter((c: any) => c.design_id === design.id).length
               
-              if (savedDesign) {
-                return {
-                  ...design,
-                  likes_count: Math.max(actualLikesCount, savedDesign.likes_count || 0),
-                  comments_count: Math.max(actualCommentsCount, savedDesign.comments_count || 0)
-                }
-              }
-              
-              // 即使没有保存的设计数据，也要使用本地存储的点赞和评论数
               return {
                 ...design,
                 likes_count: Math.max(actualLikesCount, design.likes_count || 0),
@@ -65,20 +74,39 @@ export default function ProfilePage() {
               }
             })
             
-            // 直接设置所有设计作品，与my designs页面保持一致
             setUserDesigns(updatedDesigns)
           } catch (localError) {
             console.error('Failed to load local data:', localError)
-            // 如果本地存储加载失败，使用API数据
-            setUserDesigns(allDesigns)
+            setUserDesigns(mergedDesigns)
           }
         } else {
-          // SSR环境，直接使用API数据
-          setUserDesigns(allDesigns)
+          setUserDesigns(mergedDesigns)
         }
       } catch (error) {
         console.error('Failed to load user designs:', error)
-        setUserDesigns([])
+        
+        // 如果API调用失败，尝试从本地存储加载
+        if (typeof window !== 'undefined') {
+          try {
+            const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+            const currentUser = user?.id || 'demo-user'
+            
+            // 只显示当前用户的设计
+            const userSavedDesigns = savedDesigns.filter((d: any) => d.user_id === currentUser)
+            
+            if (userSavedDesigns.length > 0) {
+              setUserDesigns(userSavedDesigns)
+              console.log('Loaded designs from localStorage:', userSavedDesigns.length)
+            } else {
+              setUserDesigns([])
+            }
+          } catch (localError) {
+            console.error('Failed to load from localStorage:', localError)
+            setUserDesigns([])
+          }
+        } else {
+          setUserDesigns([])
+        }
       }
 
       // 获取喜欢的作品ID - 优先使用本地存储，因为API返回的是固定模拟数据
@@ -141,6 +169,26 @@ export default function ProfilePage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 合并设计数据，优先使用最新的数据 - 与my designs页面完全相同的逻辑
+  const mergeDesigns = (apiDesigns: Design[], localDesigns: Design[]): Design[] => {
+    const mergedMap = new Map()
+    
+    // 首先添加API数据
+    apiDesigns.forEach(design => {
+      mergedMap.set(design.id, design)
+    })
+    
+    // 然后添加本地存储数据，覆盖API数据
+    localDesigns.forEach(design => {
+      mergedMap.set(design.id, design)
+    })
+    
+    // 按创建时间排序
+    return Array.from(mergedMap.values()).sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
   }
 
   return (

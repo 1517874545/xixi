@@ -13,50 +13,101 @@ export default function GalleryPage() {
   const [designs, setDesigns] = useState<Design[]>([])
   const [loading, setLoading] = useState(true)
 
+  // 合并设计数据，优先使用最新的数据
+  const mergeDesigns = (apiDesigns: Design[], localDesigns: Design[]): Design[] => {
+    const mergedMap = new Map()
+    
+    // 首先添加API数据
+    apiDesigns.forEach(design => {
+      mergedMap.set(design.id, design)
+    })
+    
+    // 然后添加本地存储数据，覆盖API数据
+    localDesigns.forEach(design => {
+      mergedMap.set(design.id, design)
+    })
+    
+    // 按创建时间排序
+    return Array.from(mergedMap.values()).sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+  }
+
   useEffect(() => {
     const loadDesigns = async () => {
       try {
+        console.log('Loading public designs from API...')
         const publicDesigns = await designsApi.getAll({ isPublic: true })
+        console.log('Loaded public designs from API:', publicDesigns.length)
+        
+        // 从本地存储中获取最新的公开设计数据
+        let latestPublicDesigns = []
+        if (typeof window !== 'undefined') {
+          try {
+            const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+            const publicSavedDesigns = savedDesigns.filter((d: any) => d.is_public === true)
+            if (publicSavedDesigns.length > 0) {
+              latestPublicDesigns = publicSavedDesigns
+              console.log('Loaded public designs from localStorage:', latestPublicDesigns.length)
+            }
+          } catch (localError) {
+            console.error('Failed to load from localStorage:', localError)
+          }
+        }
+        
+        // 合并API数据和本地存储数据，优先使用最新的数据
+        const mergedDesigns = mergeDesigns(publicDesigns, latestPublicDesigns)
         
         // 从本地存储中获取最新的点赞和评论数据
-        try {
-          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
-          const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
-          const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
-          
-          // 更新设计数据，优先使用本地存储的数据
-          const updatedDesigns = publicDesigns.map(design => {
-            const savedDesign = savedDesigns.find((d: any) => d.id === design.id)
+        if (typeof window !== 'undefined') {
+          try {
+            const savedLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+            const savedComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
             
-            // 计算实际的点赞数（基于本地存储的点赞数据）
-            const actualLikesCount = savedLikes.filter((id: string) => id === design.id).length
-            
-            // 计算实际的评论数（基于本地存储的评论数据）
-            const actualCommentsCount = savedComments.filter((c: any) => c.design_id === design.id).length
-            
-            if (savedDesign) {
+            // 更新设计数据，使用本地存储的点赞和评论数据
+            const updatedDesigns = mergedDesigns.map(design => {
+              // 计算实际的点赞数（基于本地存储的点赞数据）
+              const actualLikesCount = savedLikes.filter((id: string) => id === design.id).length
+              
+              // 计算实际的评论数（基于本地存储的评论数据）
+              const actualCommentsCount = savedComments.filter((c: any) => c.design_id === design.id).length
+              
               return {
                 ...design,
-                likes_count: Math.max(actualLikesCount, savedDesign.likes_count || 0),
-                comments_count: Math.max(actualCommentsCount, savedDesign.comments_count || 0)
+                likes_count: Math.max(actualLikesCount, design.likes_count || 0),
+                comments_count: Math.max(actualCommentsCount, design.comments_count || 0)
               }
-            }
+            })
             
-            // 即使没有保存的设计数据，也要使用本地存储的点赞和评论数
-            return {
-              ...design,
-              likes_count: Math.max(actualLikesCount, design.likes_count || 0),
-              comments_count: Math.max(actualCommentsCount, design.comments_count || 0)
-            }
-          })
-          
-          setDesigns(updatedDesigns)
-        } catch (localError) {
-          console.error('Failed to load local data:', localError)
-          setDesigns(publicDesigns)
+            setDesigns(updatedDesigns)
+          } catch (localError) {
+            console.error('Failed to load local data:', localError)
+            setDesigns(mergedDesigns)
+          }
+        } else {
+          setDesigns(mergedDesigns)
         }
       } catch (error) {
-        console.error('Failed to load designs:', error)
+        console.error('Failed to load designs from API:', error)
+        
+        // 如果API调用失败，尝试从本地存储加载公开设计
+        if (typeof window !== 'undefined') {
+          try {
+            const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+            
+            // 只显示公开的设计
+            const publicSavedDesigns = savedDesigns.filter((d: any) => d.is_public === true)
+            
+            if (publicSavedDesigns.length > 0) {
+              setDesigns(publicSavedDesigns)
+              console.log('Loaded public designs from localStorage:', publicSavedDesigns.length)
+            } else {
+              console.log('No public designs found in localStorage')
+            }
+          } catch (localError) {
+            console.error('Failed to load from localStorage:', localError)
+          }
+        }
       } finally {
         setLoading(false)
       }

@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { mockComponents, mockUser, type Component, type Design } from "@/lib/mock-data"
+import { mockComponents, type Component, type Design } from "@/lib/mock-data"
 import { Save, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { designsApi, componentsApi } from "@/lib/api"
+import { designsApi } from "@/lib/api"
 
 export default function EditorPage() {
   const { user } = useAuth()
@@ -138,28 +138,90 @@ export default function EditorPage() {
     }
 
     try {
+      let savedDesign
+      
       if (editingDesignId) {
         // Update existing design using API
-        await designsApi.update(editingDesignId, design)
+        savedDesign = await designsApi.update(editingDesignId, design)
         toast({
           title: "Design updated",
           description: "Your changes have been saved.",
         })
       } else {
         // Create new design using API
-        await designsApi.create(design)
+        savedDesign = await designsApi.create(design)
         toast({
           title: "Design saved",
           description: "Your design has been created successfully.",
         })
       }
       
-      router.push("/my-designs")
+      console.log('Design saved successfully:', savedDesign)
+      
+      // 确保设计数据也保存到本地存储，作为备份
+      if (typeof window !== 'undefined') {
+        try {
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const existingIndex = savedDesigns.findIndex((d: any) => d.id === savedDesign.id)
+          
+          if (existingIndex !== -1) {
+            savedDesigns[existingIndex] = savedDesign
+          } else {
+            savedDesigns.push(savedDesign)
+          }
+          
+          localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
+          console.log('Design also saved to localStorage as backup')
+        } catch (localError) {
+          console.error('Failed to save design to localStorage:', localError)
+        }
+      }
+      
+      // 添加延迟以确保数据同步完成
+      setTimeout(() => {
+        router.push("/my-designs")
+      }, 500)
     } catch (error) {
       console.error('Failed to save design:', error)
+      
+      // 如果API保存失败，尝试保存到本地存储
+      if (typeof window !== 'undefined') {
+        try {
+          const mockDesign = {
+            id: editingDesignId || `local-${Date.now()}`,
+            ...design,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            likes_count: 0,
+            comments_count: 0
+          }
+          
+          const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+          const existingIndex = savedDesigns.findIndex((d: any) => d.id === mockDesign.id)
+          
+          if (existingIndex !== -1) {
+            savedDesigns[existingIndex] = mockDesign
+          } else {
+            savedDesigns.push(mockDesign)
+          }
+          
+          localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
+          
+          toast({
+            title: "Design saved locally",
+            description: "Your design has been saved to local storage. Please check your internet connection.",
+          })
+          
+          router.push("/my-designs")
+          return
+        } catch (localError) {
+          console.error('Failed to save design to localStorage:', localError)
+        }
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to save design",
+        description: "Failed to save design. Please try again.",
         variant: "destructive"
       })
     }
