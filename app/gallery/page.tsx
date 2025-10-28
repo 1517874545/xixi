@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { mockComponents, type Design } from "@/lib/mock-data"
-import { FollowButton } from "@/components/follow-button"
 import { User, MessageCircle, Heart } from "lucide-react"
 import { designsApi } from "@/lib/api"
 
@@ -219,11 +218,6 @@ export default function GalleryPage() {
                         <User className="h-4 w-4" />
                         <span>{design.user_name || "Anonymous"}</span>
                       </div>
-                      {design.user_id !== "user1" && (
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <FollowButton userId={design.user_id} />
-                        </div>
-                      )}
                     </div>
                   </div>
 

@@ -53,24 +53,42 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
     if (loading || !user?.id) return
     
     setLoading(true)
+    
+    // 保存当前状态用于回滚
+    const previousLiked = liked
+    const previousCount = count
+    
+    // 先乐观更新UI，提升用户体验
+    const optimisticLiked = !liked
+    const optimisticCount = optimisticLiked ? Math.max(0, count + 1) : Math.max(0, count - 1)
+    
+    setLiked(optimisticLiked)
+    setCount(optimisticCount)
+    
     try {
-      // 先调用API，等待API返回结果
+      console.log('Toggling like for design:', designId, 'User:', user.id)
+      
+      // 调用API
       const result = await likesApi.toggle(designId, user.id)
       
-      // 根据API返回的结果更新本地状态
-      const newLiked = result.liked
-      const newCount = newLiked ? Math.max(0, count + 1) : Math.max(0, count - 1)
-
-      setLiked(newLiked)
-      setCount(newCount)
-      onLikeChange?.(newLiked, newCount)
-      onCountUpdate?.(newCount)
+      // API返回的实际结果
+      const actualLiked = result.liked
       
-      // 保存点赞状态到本地存储，确保profile页面能访问
-      let currentLikes = []
+      // 根据API结果计算正确的计数
+      // 注意：这里应该基于previousCount而不是当前count，因为当前count已经被乐观更新了
+      const actualCount = actualLiked ? Math.max(0, previousCount + 1) : Math.max(0, previousCount - 1)
+      
+      // 更新状态为API返回的实际结果
+      setLiked(actualLiked)
+      setCount(actualCount)
+      onLikeChange?.(actualLiked, actualCount)
+      onCountUpdate?.(actualCount)
+      
+      // 保存点赞状态到本地存储
       if (typeof window !== 'undefined') {
-        currentLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
-        if (newLiked) {
+        let currentLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+        
+        if (actualLiked) {
           if (!currentLikes.includes(designId)) {
             currentLikes.push(designId)
           }
@@ -83,12 +101,16 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
         localStorage.setItem("petcraft_likes", JSON.stringify(currentLikes))
       }
       
-      console.log('Like updated for design:', designId, 'Liked:', newLiked, 'Likes array:', currentLikes)
+      console.log('Like updated for design:', designId, 'Liked:', actualLiked, 'Count:', actualCount)
       
     } catch (error) {
       console.error('Failed to toggle like:', error)
-      // API调用失败时，不更新本地状态，避免重复点赞
-      // 可以显示错误提示，但不改变点赞状态
+      
+      // API调用失败时，回滚到之前的状态
+      setLiked(previousLiked)
+      setCount(previousCount)
+      
+      // 可以在这里添加错误提示
     } finally {
       setLoading(false)
     }

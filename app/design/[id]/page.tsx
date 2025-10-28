@@ -317,6 +317,17 @@ export default function DesignDetailPage() {
                 designId={design.id} 
                 initialLiked={isLiked} 
                 initialCount={design.likes_count || 0} 
+                onLikeChange={(liked, count) => {
+                  setIsLiked(liked)
+                  setCurrentLikesCount(count)
+                  // 更新本地存储中的设计数据
+                  const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
+                  const designIndex = savedDesigns.findIndex((d: Design) => d.id === design.id)
+                  if (designIndex !== -1) {
+                    savedDesigns[designIndex].likes_count = count
+                    localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
+                  }
+                }}
                 onCountUpdate={(count) => {
                   setCurrentLikesCount(count)
                   // 更新本地存储中的设计数据
