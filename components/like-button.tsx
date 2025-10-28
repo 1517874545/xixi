@@ -5,6 +5,7 @@ import { Heart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { likesApi } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 interface LikeButtonProps {
   designId: string
@@ -15,6 +16,7 @@ interface LikeButtonProps {
 }
 
 export function LikeButton({ designId, initialLiked = false, initialCount = 0, onLikeChange, onCountUpdate }: LikeButtonProps) {
+  const { user } = useAuth()
   const [liked, setLiked] = useState(initialLiked)
   const [count, setCount] = useState(initialCount)
   const [loading, setLoading] = useState(false)
@@ -28,8 +30,14 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
         return
       }
       
+      // 如果没有用户ID，使用初始值
+      if (!user?.id) {
+        setLiked(initialLiked)
+        return
+      }
+      
       try {
-        const isLiked = await likesApi.checkLiked(designId)
+        const isLiked = await likesApi.checkLiked(designId, user.id)
         setLiked(isLiked)
       } catch (error) {
         console.error('Failed to check like status:', error)
@@ -39,7 +47,7 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
     }
     
     checkLikeStatus()
-  }, [designId, initialLiked])
+  }, [designId, initialLiked, user?.id])
 
   const handleLike = async () => {
     if (loading) return
@@ -75,9 +83,11 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
       console.log('Like updated for design:', designId, 'Liked:', newLiked, 'Likes array:', currentLikes)
       
       // 异步调用API，但不依赖其结果
-      likesApi.toggle(designId).catch(error => {
-        console.error('API call failed but local state updated:', error)
-      })
+      if (user?.id) {
+        likesApi.toggle(designId, user.id).catch(error => {
+          console.error('API call failed but local state updated:', error)
+        })
+      }
       
     } catch (error) {
       console.error('Failed to toggle like:', error)

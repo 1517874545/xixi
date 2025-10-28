@@ -92,7 +92,7 @@ export const designsApi = {
     return data.design
   },
 
-  async create(design: Omit<Design, 'id' | 'created_at' | 'likes_count' | 'comments_count'>): Promise<Design> {
+  async create(design: Omit<Design, 'id' | 'created_at' | 'likes_count' | 'comments_count'> & { user_id: string }): Promise<Design> {
     const response = await fetchWithAuth(`${API_BASE_URL}/designs`, {
       method: 'POST',
       body: JSON.stringify(design),
@@ -131,13 +131,13 @@ export const designsApi = {
 
 // API Service for Likes
 export const likesApi = {
-  async toggle(designId: string): Promise<{ liked: boolean }> {
+  async toggle(designId: string, userId: string): Promise<{ liked: boolean }> {
     const response = await fetch(`${API_BASE_URL}/likes`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ design_id: designId }),
+      body: JSON.stringify({ design_id: designId, user_id: userId }),
     })
     if (!response.ok) {
       throw new Error('Failed to toggle like')
@@ -145,8 +145,8 @@ export const likesApi = {
     return response.json()
   },
 
-  async checkLiked(designId: string): Promise<boolean> {
-    const response = await fetch(`${API_BASE_URL}/likes?designId=${designId}`)
+  async checkLiked(designId: string, userId: string): Promise<boolean> {
+    const response = await fetch(`${API_BASE_URL}/likes?designId=${designId}&userId=${userId}`)
     if (!response.ok) {
       throw new Error('Failed to check like status')
     }
@@ -179,13 +179,13 @@ export const commentsApi = {
     return data.comments
   },
 
-  async create(designId: string, content: string): Promise<Comment> {
+  async create(designId: string, content: string, userId: string): Promise<Comment> {
     const response = await fetch(`${API_BASE_URL}/comments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ design_id: designId, content }),
+      body: JSON.stringify({ design_id: designId, content, user_id: userId }),
     })
     if (!response.ok) {
       throw new Error('Failed to create comment')

@@ -4,16 +4,20 @@ import { createClient } from '@supabase/supabase-js'
 // 安全地获取环境变量
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('Supabase environment variables are missing')
-  // 在构建时返回一个安全的客户端
 }
 
+// 创建匿名客户端用于查询
 const supabase = createClient(
   supabaseUrl || 'https://example.supabase.co',
   supabaseKey || 'example-key'
 )
+
+// 创建服务角色客户端用于绕过RLS（在认证失败时使用）
+const serviceClient = serviceKey ? createClient(supabaseUrl || 'https://example.supabase.co', serviceKey) : null
 
 export async function GET(request: NextRequest) {
   try {
@@ -104,20 +108,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { design_id, content } = body
+    const { design_id, content, user_id } = body
 
-    console.log('POST /api/comments called for design:', design_id, { content })
+    console.log('POST /api/comments called for design:', design_id, { content, user_id })
 
-    if (!design_id || !content) {
-      return NextResponse.json({ error: 'design_id and content are required' }, { status: 400 })
+    if (!design_id || !content || !user_id) {
+      return NextResponse.json({ error: 'design_id, content, and user_id are required' }, { status: 400 })
     }
 
     // 创建评论数据
     const commentData = {
-      id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       design_id,
       content,
-      user_id: null, // 暂时没有用户认证
+      user_id: user_id,
       created_at: new Date().toISOString()
     }
 

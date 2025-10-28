@@ -122,7 +122,7 @@ export default function EditorPage() {
 
     const design = {
       title,
-      user_id: mockUser.id, // 添加用户ID
+      user_id: user.id, // 使用真实用户ID
       components: { 
         body: selectedComponents.body || '',
         ears: selectedComponents.ears || '',

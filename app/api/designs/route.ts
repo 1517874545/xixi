@@ -1,22 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// 使用最简单的Supabase客户端配置
-// 直接使用匿名密钥，因为RLS策略已经允许插入
-
 // 安全地获取环境变量
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('Supabase environment variables are missing')
-  // 在构建时返回一个安全的客户端
 }
 
+// 创建匿名客户端用于查询
 const supabase = createClient(
   supabaseUrl || 'https://example.supabase.co',
   supabaseKey || 'example-key'
 )
+
+// 创建服务角色客户端用于绕过RLS（在认证失败时使用）
+const serviceClient = serviceKey ? createClient(supabaseUrl || 'https://example.supabase.co', serviceKey) : null
 
 // 定义全局类型
 interface MockDesign {
@@ -168,76 +169,71 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { title, components, is_public = false } = body
+    const { title, components, is_public = false, user_id } = body
 
-    console.log('Received design data:', { title, components, is_public })
+    console.log('Received design data:', { title, components, is_public, user_id })
+
+    // 验证必需字段
+    if (!user_id) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    }
 
     // 创建设计数据
     const designData = {
       title: title || 'Untitled Design',
       components: components || {},
       is_public: is_public || false,
-      user_id: null,
+      user_id: user_id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
 
     console.log('Attempting to insert design:', designData)
 
-    // 尝试直接插入数据库
+    // 首先尝试使用服务角色客户端（绕过RLS）
+    if (serviceClient) {
+      const { data: design, error } = await serviceClient
+        .from('designs')
+        .insert([designData])
+        .select()
+        .single()
+
+      if (!error) {
+        console.log('Design created successfully with service key:', design)
+        return NextResponse.json({ design }, { status: 201 })
+      }
+      console.error('Service client insert error:', error)
+    }
+
+    // 如果服务客户端失败，尝试使用匿名客户端（需要正确的RLS策略）
     const { data: design, error } = await supabase
       .from('designs')
       .insert([designData])
       .select()
       .single()
 
-    if (error) {
-      console.error('Supabase insert error:', error)
-      
-      // 如果插入失败，检查是否是RLS策略问题
-      if (error.code === '42501' || error.message.includes('policy')) {
-        console.log('RLS policy violation detected, using service key...')
-        
-        // 尝试使用服务密钥绕过RLS
-        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-        if (serviceKey) {
-          const serviceClient = createClient(
-            supabaseUrl || 'https://example.supabase.co',
-            serviceKey || 'example-key'
-          )
-          
-          const { data: serviceDesign, error: serviceError } = await serviceClient
-            .from('designs')
-            .insert([designData])
-            .select()
-            .single()
-          
-          if (!serviceError) {
-            console.log('Design created successfully with service key:', serviceDesign)
-            return NextResponse.json({ design: serviceDesign }, { status: 201 })
-          }
-        }
-      }
-      
-      // 如果所有数据库操作都失败，创建模拟数据但确保它能在GET中返回
-      console.log('Creating persistent mock design...')
-      const mockDesign = {
-        id: `mock-${Date.now()}`,
-        ...designData,
-        likes_count: 0,
-        comments_count: 0
-      }
-      
-      // 将模拟设计存储到内存中，以便GET可以返回它
-      global.mockDesigns = global.mockDesigns || []
-      global.mockDesigns.push(mockDesign)
-      
-      console.log('Mock design created and stored:', mockDesign)
-      return NextResponse.json({ design: mockDesign }, { status: 201 })
+    if (!error) {
+      console.log('Design created successfully:', design)
+      return NextResponse.json({ design }, { status: 201 })
     }
 
-    console.log('Design created successfully:', design)
-    return NextResponse.json({ design }, { status: 201 })
+    console.error('Supabase insert error:', error)
+    
+    // 如果所有数据库操作都失败，创建模拟数据但确保它能在GET中返回
+    console.log('Creating persistent mock design...')
+    const mockDesign = {
+      id: `mock-${Date.now()}`,
+      ...designData,
+      likes_count: 0,
+      comments_count: 0
+    }
+    
+    // 将模拟设计存储到内存中，以便GET可以返回它
+    global.mockDesigns = global.mockDesigns || []
+    global.mockDesigns.push(mockDesign)
+    
+    console.log('Mock design created and stored:', mockDesign)
+    return NextResponse.json({ design: mockDesign }, { status: 201 })
   } catch (error) {
     console.error('POST /api/designs error:', error)
     

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import type { Comment } from "@/lib/mock-data"
 import { commentsApi } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 interface CommentSectionProps {
   designId: string
@@ -17,6 +18,7 @@ interface CommentSectionProps {
 }
 
 export function CommentSection({ designId, initialComments = [], onCommentUpdate }: CommentSectionProps) {
+  const { user } = useAuth()
   const [comments, setComments] = useState<Comment[]>(initialComments)
   const [newComment, setNewComment] = useState("")
   const [showComments, setShowComments] = useState(false)
@@ -124,30 +126,32 @@ export function CommentSection({ designId, initialComments = [], onCommentUpdate
       setNewComment("")
       
       // 异步调用API（不阻塞用户操作）
-      commentsApi.create(designId, newComment)
-        .then(apiComment => {
-          console.log('Comment created via API:', apiComment.id)
-          
-          // 更新本地存储中的评论ID（如果API返回了不同的ID）
-          if (typeof window !== 'undefined') {
-            try {
-              const currentComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
-              const index = currentComments.findIndex((c: Comment) => c.id === localComment.id)
-              if (index !== -1) {
-                currentComments[index] = { ...apiComment, user_name: 'You' }
-                localStorage.setItem("petcraft_comments", JSON.stringify(currentComments))
-                
-                // 更新UI状态
-                setComments(prev => prev.map(c => c.id === localComment.id ? { ...apiComment, user_name: 'You' } : c))
+      if (user?.id) {
+        commentsApi.create(designId, newComment, user.id)
+          .then(apiComment => {
+            console.log('Comment created via API:', apiComment.id)
+            
+            // 更新本地存储中的评论ID（如果API返回了不同的ID）
+            if (typeof window !== 'undefined') {
+              try {
+                const currentComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+                const index = currentComments.findIndex((c: Comment) => c.id === localComment.id)
+                if (index !== -1) {
+                  currentComments[index] = { ...apiComment, user_name: 'You' }
+                  localStorage.setItem("petcraft_comments", JSON.stringify(currentComments))
+                  
+                  // 更新UI状态
+                  setComments(prev => prev.map(c => c.id === localComment.id ? { ...apiComment, user_name: 'You' } : c))
+                }
+              } catch (updateError) {
+                console.error('Failed to update comment with API data:', updateError)
               }
-            } catch (updateError) {
-              console.error('Failed to update comment with API data:', updateError)
             }
-          }
-        })
-        .catch(apiError => {
-          console.error('API comment creation failed, but local comment is saved:', apiError)
-        })
+          })
+          .catch(apiError => {
+            console.error('API comment creation failed, but local comment is saved:', apiError)
+          })
+      }
       
     } catch (error) {
       console.error('Failed to create comment:', error)
