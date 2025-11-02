@@ -61,7 +61,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* CTA Sectio */}
       <section className="py-16 text-center">
         <Card className="max-w-2xl mx-auto p-12 bg-gradient-to-br from-primary/5 to-secondary/5">
           <Heart className="h-12 w-12 text-primary mx-auto mb-4" />
