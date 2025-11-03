@@ -1,38 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// 安全地获取环境变量
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Supabase environment variables are missing')
-}
-
-// 创建匿名客户端用于查询
-const supabase = createClient(
-  supabaseUrl || 'https://example.supabase.co',
-  supabaseKey || 'example-key',
-  {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  }
-)
-
-// 创建服务角色客户端用于绕过RLS（在认证失败时使用）
-const serviceClient = serviceKey ? createClient(
-  supabaseUrl || 'https://example.supabase.co', 
-  serviceKey,
-  {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  }
-) : null
+import { createSupabaseClient, createServiceClient } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -49,6 +16,8 @@ export async function GET(request: NextRequest) {
       console.log('Cleaned user_id for GET:', cleanUserId)
       
       // 使用服务角色客户端绕过RLS限制
+      const supabase = createSupabaseClient()
+      const serviceClient = createServiceClient()
       const clientToUse = serviceClient || supabase
       
       const { data: likes, error } = await clientToUse
@@ -94,6 +63,8 @@ export async function GET(request: NextRequest) {
       const cleanUserId = userId.trim().replace(/^"|"$/g, '')
       
       // 使用服务角色客户端绕过RLS限制
+      const supabase = createSupabaseClient()
+      const serviceClient = createServiceClient()
       const clientToUse = serviceClient || supabase
       
       const { data: likes, error } = await clientToUse
@@ -161,6 +132,8 @@ export async function POST(request: NextRequest) {
     console.log('Cleaned user_id:', cleanUserId)
     
     // 使用服务角色客户端绕过RLS限制
+    const supabase = createSupabaseClient()
+    const serviceClient = createServiceClient()
     const clientToUse = serviceClient || supabase
     
     const { data: existingLike, error: checkError } = await clientToUse

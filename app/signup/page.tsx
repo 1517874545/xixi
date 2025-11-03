@@ -1,8 +1,9 @@
 "use client"
 
 import type React from "react"
+
 import { useState } from "react"
-import { useAuth } from "@/lib/auth-context"
+import { useAuthApi } from "@/lib/auth-api-context"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
@@ -14,26 +15,40 @@ import { Sparkles } from "lucide-react"
 export default function SignupPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [name, setName] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [username, setUsername] = useState("")
   const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
-  const { signUp } = useAuth()
+  const [loading, setLoading] = useState(false)
+  const { signUp } = useAuthApi()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-    setSuccess("")
+    setLoading(true)
 
-    const { error } = await signUp(email, password, name)
+    // 验证密码匹配
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      setLoading(false)
+      return
+    }
+
+    // 验证密码强度
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters")
+      setLoading(false)
+      return
+    }
+
+    const { error } = await signUp(email, password, username)
     if (error) {
       setError(error)
     } else {
-      setSuccess("Account created successfully! Please check your email for verification.")
-      setTimeout(() => {
-        router.push("/login")
-      }, 3000)
+      router.push("/editor")
     }
+    
+    setLoading(false)
   }
 
   return (
@@ -50,16 +65,16 @@ export default function SignupPage() {
         <Card className="p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && <div className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm">{error}</div>}
-            {success && <div className="p-3 bg-green-100 text-green-700 rounded-lg text-sm">{success}</div>}
 
             <div>
-              <Label htmlFor="name">Display Name</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="name"
+                id="username"
                 type="text"
-                placeholder="Your display name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
               />
             </div>
 
@@ -84,12 +99,23 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
               />
             </div>
 
-            <Button type="submit" className="w-full">
-              Create Account
+            <div>
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Creating Account..." : "Sign Up"}
             </Button>
           </form>
 
@@ -100,6 +126,10 @@ export default function SignupPage() {
             </Link>
           </div>
         </Card>
+
+        <p className="text-center text-sm text-muted-foreground mt-6">
+          By signing up, you agree to our Terms of Service and Privacy Policy
+        </p>
       </div>
     </div>
   )

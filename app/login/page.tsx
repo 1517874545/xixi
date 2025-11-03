@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useAuth } from "@/lib/auth-context"
+import { useAuthApi } from "@/lib/auth-api-context"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
-  const { signIn } = useAuth()
+  const { signIn } = useAuthApi()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {

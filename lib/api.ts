@@ -83,6 +83,10 @@ export const designsApi = {
     return data.designs
   },
 
+  async getUserDesigns(userId: string): Promise<Design[]> {
+    return this.getAll({ userId })
+  },
+
   async getById(id: string): Promise<Design> {
     const response = await fetchWithAuth(`${API_BASE_URL}/designs/${id}`)
     if (!response.ok) {
@@ -93,23 +97,40 @@ export const designsApi = {
   },
 
   async create(design: Omit<Design, 'id' | 'created_at' | 'likes_count' | 'comments_count'> & { user_id: string }): Promise<Design> {
-    const response = await fetchWithAuth(`${API_BASE_URL}/designs`, {
+    const response = await fetch(`${API_BASE_URL}/designs`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(design),
     })
     if (!response.ok) {
-      throw new Error('Failed to create design')
+      let errorMessage = '保存设计失败'
+      try {
+        const errorData = await response.json()
+        errorMessage = errorData.error || errorMessage
+      } catch {
+        const errorText = await response.text()
+        errorMessage = errorText || errorMessage
+      }
+      console.error('Failed to create design:', errorMessage)
+      throw new Error(errorMessage)
     }
     const data = await response.json()
     return data.design
   },
 
   async update(id: string, updates: Partial<Design>): Promise<Design> {
-    const response = await fetchWithAuth(`${API_BASE_URL}/designs/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/designs/${id}`, {
       method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(updates),
     })
     if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Failed to update design:', errorText)
       throw new Error('Failed to update design')
     }
     const data = await response.json()
@@ -202,6 +223,15 @@ export const commentsApi = {
     }
     const data = await response.json()
     return data.comments
+  },
+
+  async getUserComments(userId: string): Promise<Comment[]> {
+    const response = await fetch(`${API_BASE_URL}/comments?userId=${userId}`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch user comments')
+    }
+    const data = await response.json()
+    return data.comments || []
   },
 
   async create(designId: string, content: string, userId: string): Promise<Comment> {

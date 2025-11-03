@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAuth } from "@/lib/auth-context"
+import { useAuthApi } from "@/lib/auth-api-context"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { mockComponents, type Design } from "@/lib/mock-data"
+import { type Design } from "@/lib/mock-data"
 import { Trash2, Eye, EyeOff, Edit, Share2, Heart, MessageCircle, TrendingUp, Calendar } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast"
 import { designsApi } from "@/lib/api"
 
 export default function MyDesignsPage() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuthApi()
   const router = useRouter()
   const { toast } = useToast()
   const [designs, setDesigns] = useState<Design[]>([])
@@ -21,14 +21,37 @@ export default function MyDesignsPage() {
   const [sortBy, setSortBy] = useState<"date" | "likes">("date")
   const [filterBy, setFilterBy] = useState<"all" | "public" | "private">("all")
   const [loading, setLoading] = useState(true)
+  const [components, setComponents] = useState<any[]>([])
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    // 加载组件数据
+    const fetchComponents = async () => {
+      try {
+        const response = await fetch('/api/components')
+        if (response.ok) {
+          const data = await response.json()
+          setComponents(data.components || [])
+        }
+      } catch (error) {
+        console.error('Error fetching components:', error)
+      }
+    }
+    
+    fetchComponents()
+  }, [])
+
+  useEffect(() => {
+    // 检查是否有临时用户ID
+    const tempUserId = localStorage.getItem('temp_user_id')
+    
+    // 如果没有用户且没有临时用户ID，跳转到登录页面
+    if (!authLoading && !user && !tempUserId) {
       router.push("/login")
       return
     }
 
-    if (user) {
+    // 如果有用户或临时用户ID，加载设计
+    if (user || tempUserId) {
       loadDesigns()
     }
   }, [user, authLoading, router])
@@ -37,8 +60,9 @@ export default function MyDesignsPage() {
     try {
       setLoading(true)
       
-      // 获取当前用户ID
-      const currentUser = user?.id || 'demo-user'
+      // 获取当前用户ID（优先使用真实用户ID，其次使用临时用户ID）
+      const tempUserId = localStorage.getItem('temp_user_id')
+      const currentUser = user?.id || tempUserId || 'demo-user'
       
       // 首先检查本地存储是否有最新数据
       let latestDesigns = []
@@ -99,7 +123,8 @@ export default function MyDesignsPage() {
       if (typeof window !== 'undefined') {
         try {
           const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
-          const currentUser = user?.id || 'demo-user'
+          const tempUserId = localStorage.getItem('temp_user_id')
+          const currentUser = user?.id || tempUserId || 'demo-user'
           
           // 只显示当前用户的设计
           const userSavedDesigns = savedDesigns.filter((d: any) => d.user_id === currentUser)
@@ -488,7 +513,7 @@ export default function MyDesignsPage() {
                       {design.components?.background && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
+                            __html: components.find((c) => c.id === design.components?.background)?.svg_data || "",
                           }}
                           style={{ color: design.components?.bodyColor }}
                         />
@@ -498,7 +523,7 @@ export default function MyDesignsPage() {
                       {design.components?.body && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
+                            __html: components.find((c) => c.id === design.components?.body)?.svg_data || "",
                           }}
                           style={{ color: design.components?.bodyColor }}
                         />
@@ -508,7 +533,7 @@ export default function MyDesignsPage() {
                       {design.components?.ears && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
+                            __html: components.find((c) => c.id === design.components?.ears)?.svg_data || "",
                           }}
                           style={{ color: design.components?.bodyColor }}
                         />
@@ -518,7 +543,7 @@ export default function MyDesignsPage() {
                       {design.components?.eyes && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
+                            __html: components.find((c) => c.id === design.components?.eyes)?.svg_data || "",
                           }}
                         />
                       )}
@@ -527,7 +552,7 @@ export default function MyDesignsPage() {
                       {design.components?.nose && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
+                            __html: components.find((c) => c.id === design.components?.nose)?.svg_data || "",
                           }}
                         />
                       )}
@@ -536,7 +561,7 @@ export default function MyDesignsPage() {
                       {design.components?.mouth && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
+                            __html: components.find((c) => c.id === design.components?.mouth)?.svg_data || "",
                           }}
                         />
                       )}
@@ -545,7 +570,7 @@ export default function MyDesignsPage() {
                       {design.components?.accessories && (
                         <g
                           dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
+                            __html: components.find((c) => c.id === design.components?.accessories)?.svg_data || "",
                           }}
                         />
                       )}

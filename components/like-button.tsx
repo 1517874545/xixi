@@ -5,7 +5,7 @@ import { Heart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { likesApi } from "@/lib/api"
-import { useAuth } from "@/lib/auth-context"
+import { useAuthApi } from "@/lib/auth-api-context"
 
 interface LikeButtonProps {
   designId: string
@@ -16,10 +16,28 @@ interface LikeButtonProps {
 }
 
 export function LikeButton({ designId, initialLiked = false, initialCount = 0, onLikeChange, onCountUpdate }: LikeButtonProps) {
-  const { user } = useAuth()
+  const { user } = useAuthApi()
   const [liked, setLiked] = useState(initialLiked)
   const [count, setCount] = useState(initialCount)
   const [loading, setLoading] = useState(false)
+
+  // 获取用户ID（支持临时用户）
+  const getUserId = () => {
+    if (user?.id) return user.id
+    
+    // 检查是否有临时用户ID
+    if (typeof window !== 'undefined') {
+      const tempUserId = localStorage.getItem('temp_user_id')
+      if (tempUserId) return tempUserId
+      
+      // 如果没有临时用户ID，创建一个
+      const newTempUserId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      localStorage.setItem('temp_user_id', newTempUserId)
+      return newTempUserId
+    }
+    
+    return null
+  }
 
   useEffect(() => {
     // Check initial like status from API
@@ -30,14 +48,14 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
         return
       }
       
-      // 如果没有用户ID，使用初始值
-      if (!user?.id) {
+      const userId = getUserId()
+      if (!userId) {
         setLiked(initialLiked)
         return
       }
       
       try {
-        const isLiked = await likesApi.checkLiked(designId, user.id)
+        const isLiked = await likesApi.checkLiked(designId, userId)
         setLiked(isLiked)
       } catch (error) {
         console.error('Failed to check like status:', error)
@@ -50,7 +68,8 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
   }, [designId, initialLiked, user?.id])
 
   const handleLike = async () => {
-    if (loading || !user?.id) return
+    const userId = getUserId()
+    if (loading || !userId) return
     
     setLoading(true)
     
@@ -66,10 +85,10 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
     setCount(optimisticCount)
     
     try {
-      console.log('Toggling like for design:', designId, 'User:', user.id)
+      console.log('Toggling like for design:', designId, 'User:', userId)
       
       // 调用API
-      const result = await likesApi.toggle(designId, user.id)
+      const result = await likesApi.toggle(designId, userId)
       
       // API返回的实际结果
       const actualLiked = result.liked
@@ -84,9 +103,10 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
       onLikeChange?.(actualLiked, actualCount)
       onCountUpdate?.(actualCount)
       
-      // 保存点赞状态到本地存储
+      // 保存点赞状态到本地存储（按用户ID存储）
       if (typeof window !== 'undefined') {
-        let currentLikes = JSON.parse(localStorage.getItem("petcraft_likes") || "[]")
+        const key = `likes_${userId}`
+        let currentLikes = JSON.parse(localStorage.getItem(key) || "[]")
         
         if (actualLiked) {
           if (!currentLikes.includes(designId)) {
@@ -98,7 +118,7 @@ export function LikeButton({ designId, initialLiked = false, initialCount = 0, o
             currentLikes.splice(index, 1)
           }
         }
-        localStorage.setItem("petcraft_likes", JSON.stringify(currentLikes))
+        localStorage.setItem(key, JSON.stringify(currentLikes))
       }
       
       console.log('Like updated for design:', designId, 'Liked:', actualLiked, 'Count:', actualCount)

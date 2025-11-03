@@ -3,14 +3,27 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
-import { mockComponents, type Design } from "@/lib/mock-data"
+import SearchFilter, { type FilterOptions } from "@/components/search-filter"
+import { type Design } from "@/lib/mock-data"
 import { User, MessageCircle, Heart } from "lucide-react"
 import { designsApi } from "@/lib/api"
+import { FollowButton } from "@/components/follow-button"
+import { useAuthApi } from "@/lib/auth-api-context"
 
 export default function GalleryPage() {
   const router = useRouter()
-  const [designs, setDesigns] = useState<Design[]>([])
+  const { user } = useAuthApi()
+  const [allDesigns, setAllDesigns] = useState<Design[]>([])
+  const [filteredDesigns, setFilteredDesigns] = useState<Design[]>([])
   const [loading, setLoading] = useState(true)
+  const [components, setComponents] = useState<any[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filters, setFilters] = useState<FilterOptions>({
+    tags: [],
+    sortBy: "newest",
+    componentType: undefined,
+    color: undefined
+  })
 
   // 合并设计数据，优先使用最新的数据
   const mergeDesigns = (apiDesigns: Design[], localDesigns: Design[]): Design[] => {
@@ -31,6 +44,88 @@ export default function GalleryPage() {
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )
   }
+
+  // 获取所有可用标签
+  const getAvailableTags = (designs: Design[]): string[] => {
+    const allTags = new Set<string>()
+    designs.forEach(design => {
+      if (design.tags && Array.isArray(design.tags)) {
+        design.tags.forEach(tag => allTags.add(tag))
+      }
+    })
+    return Array.from(allTags)
+  }
+
+  // 应用搜索和筛选
+  const applyFilters = (designs: Design[], query: string, filterOptions: FilterOptions): Design[] => {
+    let filtered = designs
+
+    // 搜索过滤
+    if (query.trim()) {
+      filtered = filtered.filter(design => 
+        design.title.toLowerCase().includes(query.toLowerCase()) ||
+        (design.user_name && design.user_name.toLowerCase().includes(query.toLowerCase())) ||
+        (design.tags && design.tags.some(tag => tag.toLowerCase().includes(query.toLowerCase())))
+      )
+    }
+
+    // 标签过滤
+    if (filterOptions.tags.length > 0) {
+      filtered = filtered.filter(design => 
+        design.tags && filterOptions.tags.every(tag => design.tags.includes(tag))
+      )
+    }
+
+    // 组件类型过滤
+    if (filterOptions.componentType) {
+      filtered = filtered.filter(design => 
+        design.components && design.components[filterOptions.componentType]
+      )
+    }
+
+    // 颜色过滤
+    if (filterOptions.color) {
+      filtered = filtered.filter(design => 
+        design.components && 
+        (design.components.bodyColor === filterOptions.color ||
+         design.components.earsColor === filterOptions.color ||
+         design.components.accessoriesColor === filterOptions.color)
+      )
+    }
+
+    // 排序
+    switch (filterOptions.sortBy) {
+      case "popular":
+        filtered.sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0))
+        break
+      case "oldest":
+        filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        break
+      case "newest":
+      default:
+        filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        break
+    }
+
+    return filtered
+  }
+
+  useEffect(() => {
+    // 加载组件数据
+    const fetchComponents = async () => {
+      try {
+        const response = await fetch('/api/components')
+        if (response.ok) {
+          const data = await response.json()
+          setComponents(data.components || [])
+        }
+      } catch (error) {
+        console.error('Error fetching components:', error)
+      }
+    }
+    
+    fetchComponents()
+  }, [])
 
   useEffect(() => {
     const loadDesigns = async () => {
@@ -78,13 +173,13 @@ export default function GalleryPage() {
               }
             })
             
-            setDesigns(updatedDesigns)
+            setAllDesigns(updatedDesigns)
           } catch (localError) {
             console.error('Failed to load local data:', localError)
-            setDesigns(mergedDesigns)
+            setAllDesigns(mergedDesigns)
           }
         } else {
-          setDesigns(mergedDesigns)
+          setAllDesigns(mergedDesigns)
         }
       } catch (error) {
         console.error('Failed to load designs from API:', error)
@@ -98,7 +193,7 @@ export default function GalleryPage() {
             const publicSavedDesigns = savedDesigns.filter((d: any) => d.is_public === true)
             
             if (publicSavedDesigns.length > 0) {
-              setDesigns(publicSavedDesigns)
+              setAllDesigns(publicSavedDesigns)
               console.log('Loaded public designs from localStorage:', publicSavedDesigns.length)
             } else {
               console.log('No public designs found in localStorage')
@@ -115,24 +210,72 @@ export default function GalleryPage() {
     loadDesigns()
   }, [])
 
+  // 当搜索查询或筛选条件变化时，重新应用筛选
+  useEffect(() => {
+    if (allDesigns.length > 0) {
+      const filtered = applyFilters(allDesigns, searchQuery, filters)
+      setFilteredDesigns(filtered)
+    }
+  }, [allDesigns, searchQuery, filters])
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+  }
+
+  const handleFilter = (filterOptions: FilterOptions) => {
+    setFilters(filterOptions)
+  }
+
+  const availableTags = getAvailableTags(allDesigns)
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Community Gallery</h1>
+          <h1 className="text-3xl font-bold mb-2">社区画廊</h1>
           <p className="text-muted-foreground">
-            Explore amazing pet illustrations created by our community
-            {designs.length > 0 && ` · ${designs.length} ${designs.length === 1 ? "design" : "designs"}`}
+            探索社区创作的精彩宠物插画
+            {filteredDesigns.length > 0 && ` · ${filteredDesigns.length} ${filteredDesigns.length === 1 ? "个作品" : "个作品"}`}
           </p>
         </div>
 
-        {designs.length === 0 ? (
+        {/* 搜索和筛选组件 */}
+        <div className="mb-8">
+          <SearchFilter
+            onSearch={handleSearch}
+            onFilter={handleFilter}
+            availableTags={availableTags}
+          />
+        </div>
+
+        {loading ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => (
+              <Card key={i} className="p-4 animate-pulse">
+                <div className="w-full h-48 bg-muted rounded-lg mb-4"></div>
+                <div className="space-y-3">
+                  <div className="h-4 bg-muted rounded w-3/4"></div>
+                  <div className="h-3 bg-muted rounded w-1/2"></div>
+                  <div className="flex gap-4 pt-2">
+                    <div className="h-3 bg-muted rounded w-8"></div>
+                    <div className="h-3 bg-muted rounded w-8"></div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : filteredDesigns.length === 0 ? (
           <Card className="p-12 text-center">
-            <p className="text-muted-foreground">No public designs yet. Be the first to share!</p>
+            <p className="text-muted-foreground">
+              {allDesigns.length === 0 
+                ? "还没有公开的作品。成为第一个分享的人吧！" 
+                : "没有找到符合筛选条件的作品。尝试调整搜索条件或筛选选项。"
+              }
+            </p>
           </Card>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {designs.map((design: any) => (
+            {filteredDesigns.map((design: any) => (
               <Card
                 key={design.id}
                 className="p-4 hover:shadow-lg transition-all cursor-pointer group"
@@ -146,7 +289,7 @@ export default function GalleryPage() {
                   {design.components?.background && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
+                        __html: components.find((c) => c.id === design.components?.background)?.svg_data || "",
                       }}
                       style={{ color: design.components?.bodyColor }}
                     />
@@ -156,7 +299,7 @@ export default function GalleryPage() {
                   {design.components?.body && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
+                        __html: components.find((c) => c.id === design.components?.body)?.svg_data || "",
                       }}
                       style={{ color: design.components?.bodyColor }}
                     />
@@ -166,7 +309,7 @@ export default function GalleryPage() {
                   {design.components?.ears && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
+                        __html: components.find((c) => c.id === design.components?.ears)?.svg_data || "",
                       }}
                       style={{ color: design.components?.earsColor || design.components?.bodyColor }}
                     />
@@ -176,7 +319,7 @@ export default function GalleryPage() {
                   {design.components?.eyes && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
+                        __html: components.find((c) => c.id === design.components?.eyes)?.svg_data || "",
                       }}
                     />
                   )}
@@ -185,7 +328,7 @@ export default function GalleryPage() {
                   {design.components?.nose && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
+                        __html: components.find((c) => c.id === design.components?.nose)?.svg_data || "",
                       }}
                     />
                   )}
@@ -194,7 +337,7 @@ export default function GalleryPage() {
                   {design.components?.mouth && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
+                        __html: components.find((c) => c.id === design.components?.mouth)?.svg_data || "",
                       }}
                     />
                   )}
@@ -203,7 +346,7 @@ export default function GalleryPage() {
                   {design.components?.accessories && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
+                        __html: components.find((c) => c.id === design.components?.accessories)?.svg_data || "",
                       }}
                       style={{ color: design.components?.accessoriesColor || "#000000" }}
                     />
@@ -216,10 +359,35 @@ export default function GalleryPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <User className="h-4 w-4" />
-                        <span>{design.user_name || "Anonymous"}</span>
+                        <span>{design.user_name || "匿名用户"}</span>
                       </div>
+                      {user && design.user_id && design.user_id !== user.id && (
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <FollowButton 
+                            targetUserId={design.user_id} 
+                            targetUserName={design.user_name}
+                            className="text-xs"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* 标签显示 */}
+                  {design.tags && design.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {design.tags.slice(0, 3).map((tag: string) => (
+                        <span key={tag} className="text-xs bg-muted px-2 py-1 rounded">
+                          {tag}
+                        </span>
+                      ))}
+                      {design.tags.length > 3 && (
+                        <span className="text-xs text-muted-foreground">
+                          +{design.tags.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-4 pt-2 border-t text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">

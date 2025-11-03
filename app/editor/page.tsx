@@ -1,32 +1,35 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/lib/auth-context"
+import { useAuthApi } from "@/lib/auth-api-context"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { mockComponents, type Component, type Design } from "@/lib/mock-data"
-import { Save, Download } from "lucide-react"
+import { type Component, type Design } from "@/lib/mock-data"
+import { Save, Download, Globe } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { designsApi } from "@/lib/api"
+import ExportButton from "@/components/export-button"
 
 export default function EditorPage() {
-  const { user } = useAuth()
+  const { user } = useAuthApi()
   const router = useRouter()
   const { toast } = useToast()
 
   const [editingDesignId, setEditingDesignId] = useState<string | null>(null)
+  const [components, setComponents] = useState<Component[]>([])
+  const [loading, setLoading] = useState(true)
 
   const [selectedComponents, setSelectedComponents] = useState<Record<string, string>>({
-    body: "1",
-    ears: "20",
-    eyes: "40",
-    nose: "60",
-    mouth: "80",
-    accessories: "109",
-    background: "120",
+    body: "",
+    ears: "",
+    eyes: "",
+    nose: "",
+    mouth: "",
+    accessories: "",
+    background: "",
   })
   const [colors, setColors] = useState({
     body: "#fbbf24",
@@ -34,6 +37,7 @@ export default function EditorPage() {
     accessories: "#ec4899",
   })
   const [title, setTitle] = useState("")
+  const [isPublic, setIsPublic] = useState(false)
   const [activeTab, setActiveTab] = useState<Component["type"]>("body")
 
   const presetColors = [
@@ -51,7 +55,53 @@ export default function EditorPage() {
     "#000000", // black
   ]
 
-  const componentsByType = mockComponents.reduce(
+  // 从API获取组件数据
+  useEffect(() => {
+    const fetchComponents = async () => {
+      try {
+        const response = await fetch('/api/components')
+        if (response.ok) {
+          const data = await response.json()
+          setComponents(data.components || [])
+          
+          // 设置默认选中的组件
+          if (data.components && data.components.length > 0) {
+            const defaultComponents: Record<string, string> = {}
+            const types = ['body', 'ears', 'eyes', 'nose', 'mouth', 'accessories', 'background']
+            
+            types.forEach(type => {
+              const typeComponents = data.components.filter((c: Component) => c.type === type)
+              if (typeComponents.length > 0) {
+                defaultComponents[type] = typeComponents[0].id
+              }
+            })
+            
+            setSelectedComponents(defaultComponents)
+          }
+        } else {
+          console.error('Failed to fetch components:', response.status)
+          toast({
+            title: "Error",
+            description: "Failed to load components. Please refresh the page.",
+            variant: "destructive"
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching components:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load components. Please check your connection.",
+          variant: "destructive"
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchComponents()
+  }, [toast])
+
+  const componentsByType = components.reduce(
     (acc, comp) => {
       if (!acc[comp.type]) acc[comp.type] = []
       acc[comp.type].push(comp)
@@ -73,13 +123,13 @@ export default function EditorPage() {
         // Load components
         if (design.components) {
           setSelectedComponents({
-            body: design.components.body || "1",
-            ears: design.components.ears || "20",
-            eyes: design.components.eyes || "40",
-            nose: design.components.nose || "60",
-            mouth: design.components.mouth || "80",
-            accessories: design.components.accessories || "109",
-            background: design.components.background || "120",
+            body: design.components.body || "",
+            ears: design.components.ears || "",
+            eyes: design.components.eyes || "",
+            nose: design.components.nose || "",
+            mouth: design.components.mouth || "",
+            accessories: design.components.accessories || "",
+            background: design.components.background || "",
           })
 
           // Load colors if they exist
@@ -106,15 +156,29 @@ export default function EditorPage() {
   }, [toast])
 
   const handleSave = async () => {
-    if (!user) {
-      router.push("/login")
-      return
+    // 临时解决方案：如果用户未登录，创建一个临时用户ID
+    let userId = user?.id
+    
+    if (!userId) {
+      // 检查本地存储是否有临时用户ID
+      userId = localStorage.getItem('temp_user_id')
+      
+      if (!userId) {
+        // 创建临时用户ID
+        userId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        localStorage.setItem('temp_user_id', userId)
+        
+        toast({
+          title: "使用临时账户",
+          description: "您正在使用临时账户保存设计。建议注册账户以永久保存。",
+        })
+      }
     }
 
     if (!title.trim()) {
       toast({
-        title: "Title required",
-        description: "Please enter a title for your design.",
+        title: "标题不能为空",
+        description: "请为您的设计输入一个标题。",
         variant: "destructive",
       })
       return
@@ -122,7 +186,7 @@ export default function EditorPage() {
 
     const design = {
       title,
-      user_id: user.id, // 使用真实用户ID
+      user_id: userId, // 使用用户ID（真实或临时）
       components: { 
         body: selectedComponents.body || '',
         ears: selectedComponents.ears || '',
@@ -134,7 +198,7 @@ export default function EditorPage() {
         bodyColor: colors.body,
         ...selectedComponents
       },
-      is_public: false,
+      is_public: isPublic,
     }
 
     try {
@@ -144,15 +208,15 @@ export default function EditorPage() {
         // Update existing design using API
         savedDesign = await designsApi.update(editingDesignId, design)
         toast({
-          title: "Design updated",
-          description: "Your changes have been saved.",
+          title: "设计已更新",
+          description: "您的更改已保存。",
         })
       } else {
         // Create new design using API
         savedDesign = await designsApi.create(design)
         toast({
-          title: "Design saved",
-          description: "Your design has been created successfully.",
+          title: "设计已保存",
+          description: "您的设计已成功创建。",
         })
       }
       
@@ -184,6 +248,9 @@ export default function EditorPage() {
     } catch (error) {
       console.error('Failed to save design:', error)
       
+      // 获取详细的错误信息
+      const errorMessage = error instanceof Error ? error.message : '保存设计失败，请重试'
+      
       // 如果API保存失败，尝试保存到本地存储
       if (typeof window !== 'undefined') {
         try {
@@ -208,8 +275,8 @@ export default function EditorPage() {
           localStorage.setItem("petcraft_designs", JSON.stringify(savedDesigns))
           
           toast({
-            title: "Design saved locally",
-            description: "Your design has been saved to local storage. Please check your internet connection.",
+            title: "设计已保存到本地",
+            description: "您的设计已保存到本地存储。请检查网络连接。",
           })
           
           router.push("/my-designs")
@@ -220,8 +287,8 @@ export default function EditorPage() {
       }
       
       toast({
-        title: "Error",
-        description: "Failed to save design. Please try again.",
+        title: "保存失败",
+        description: errorMessage,
         variant: "destructive"
       })
     }
@@ -239,6 +306,28 @@ export default function EditorPage() {
     link.download = `${title || "pet-illustration"}.svg`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto text-center">
+          <h1 className="text-3xl font-bold mb-4">Loading Components...</h1>
+          <p className="text-muted-foreground">Please wait while we load the pet components</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto text-center">
+          <h1 className="text-3xl font-bold mb-4">Loading Components...</h1>
+          <p className="text-muted-foreground">Please wait while we load the pet components</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -261,7 +350,7 @@ export default function EditorPage() {
                   {selectedComponents.background && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === selectedComponents.background)?.svg_data || "",
+                        __html: components.find((c) => c.id === selectedComponents.background)?.svg_data || "",
                       }}
                     />
                   )}
@@ -270,7 +359,7 @@ export default function EditorPage() {
                   {selectedComponents.body && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === selectedComponents.body)?.svg_data || "",
+                        __html: components.find((c) => c.id === selectedComponents.body)?.svg_data || "",
                       }}
                       style={{ color: colors.body }}
                     />
@@ -280,7 +369,7 @@ export default function EditorPage() {
                   {selectedComponents.ears && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === selectedComponents.ears)?.svg_data || "",
+                        __html: components.find((c) => c.id === selectedComponents.ears)?.svg_data || "",
                       }}
                       style={{ color: colors.ears }}
                     />
@@ -290,7 +379,7 @@ export default function EditorPage() {
                   {selectedComponents.eyes && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === selectedComponents.eyes)?.svg_data || "",
+                        __html: components.find((c) => c.id === selectedComponents.eyes)?.svg_data || "",
                       }}
                     />
                   )}
@@ -299,7 +388,7 @@ export default function EditorPage() {
                   {selectedComponents.nose && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === selectedComponents.nose)?.svg_data || "",
+                        __html: components.find((c) => c.id === selectedComponents.nose)?.svg_data || "",
                       }}
                     />
                   )}
@@ -308,7 +397,7 @@ export default function EditorPage() {
                   {selectedComponents.mouth && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === selectedComponents.mouth)?.svg_data || "",
+                        __html: components.find((c) => c.id === selectedComponents.mouth)?.svg_data || "",
                       }}
                     />
                   )}
@@ -317,7 +406,7 @@ export default function EditorPage() {
                   {selectedComponents.accessories && (
                     <g
                       dangerouslySetInnerHTML={{
-                        __html: mockComponents.find((c) => c.id === selectedComponents.accessories)?.svg_data || "",
+                        __html: components.find((c) => c.id === selectedComponents.accessories)?.svg_data || "",
                       }}
                       style={{ color: colors.accessories }}
                     />
@@ -444,15 +533,44 @@ export default function EditorPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button onClick={handleSave} className="flex-1 gap-2">
-                    <Save className="h-4 w-4" />
-                    {editingDesignId ? "Update Design" : "Save Design"}
-                  </Button>
-                  <Button onClick={handleDownload} variant="outline" className="gap-2 bg-transparent">
-                    <Download className="h-4 w-4" />
-                    Download
-                  </Button>
+                <div className="space-y-4">
+                  {/* 发布到画廊选项 */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="is-public"
+                      checked={isPublic}
+                      onChange={(e) => setIsPublic(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <Label htmlFor="is-public" className="flex items-center gap-2 cursor-pointer">
+                      <Globe className="h-4 w-4" />
+                      发布到社区画廊
+                    </Label>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button onClick={handleSave} className="flex-1 gap-2">
+                      <Save className="h-4 w-4" />
+                      {editingDesignId ? "更新设计" : "保存设计"}
+                    </Button>
+                    <Button onClick={handleDownload} variant="outline" className="gap-2 bg-transparent">
+                      <Download className="h-4 w-4" />
+                      下载
+                    </Button>
+                  </div>
+                  
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">导出和分享</Label>
+                    <ExportButton 
+                      design={{
+                        id: editingDesignId || "new-design",
+                        title: title || "未命名设计",
+                        components: selectedComponents
+                      }}
+                      svgElement={document.getElementById("pet-canvas") as SVGSVGElement}
+                    />
+                  </div>
                 </div>
               </div>
             </Card>

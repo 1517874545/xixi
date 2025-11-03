@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import type { Comment } from "@/lib/mock-data"
 import { commentsApi } from "@/lib/api"
-import { useAuth } from "@/lib/auth-context"
+import { useAuthApi } from "@/lib/auth-api-context"
 
 interface CommentSectionProps {
   designId: string
@@ -18,7 +18,7 @@ interface CommentSectionProps {
 }
 
 export function CommentSection({ designId, initialComments = [], onCommentUpdate }: CommentSectionProps) {
-  const { user } = useAuth()
+  const { user } = useAuthApi()
   const [comments, setComments] = useState<Comment[]>(initialComments)
   const [newComment, setNewComment] = useState("")
   const [showComments, setShowComments] = useState(false)
@@ -85,19 +85,45 @@ export function CommentSection({ designId, initialComments = [], onCommentUpdate
     }
   }
 
+  // 获取用户ID（支持临时用户）
+  const getUserId = () => {
+    if (user?.id) return user.id
+    
+    // 检查是否有临时用户ID
+    if (typeof window !== 'undefined') {
+      const tempUserId = localStorage.getItem('temp_user_id')
+      if (tempUserId) return tempUserId
+      
+      // 如果没有临时用户ID，创建一个
+      const newTempUserId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      localStorage.setItem('temp_user_id', newTempUserId)
+      return newTempUserId
+    }
+    
+    return null
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newComment.trim() || loading) return
 
     setLoading(true)
     
+    const userId = getUserId()
+    if (!userId) {
+      console.error('No user ID available')
+      setLoading(false)
+      return
+    }
+
     // 首先创建本地评论对象
     const localComment = {
       id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       design_id: designId,
       content: newComment,
       user_name: 'You',
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      user_id: userId
     }
 
     try {
@@ -126,32 +152,30 @@ export function CommentSection({ designId, initialComments = [], onCommentUpdate
       setNewComment("")
       
       // 异步调用API（不阻塞用户操作）
-      if (user?.id) {
-        commentsApi.create(designId, newComment, user.id)
-          .then(apiComment => {
-            console.log('Comment created via API:', apiComment.id)
-            
-            // 更新本地存储中的评论ID（如果API返回了不同的ID）
-            if (typeof window !== 'undefined') {
-              try {
-                const currentComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
-                const index = currentComments.findIndex((c: Comment) => c.id === localComment.id)
-                if (index !== -1) {
-                  currentComments[index] = { ...apiComment, user_name: 'You' }
-                  localStorage.setItem("petcraft_comments", JSON.stringify(currentComments))
-                  
-                  // 更新UI状态
-                  setComments(prev => prev.map(c => c.id === localComment.id ? { ...apiComment, user_name: 'You' } : c))
-                }
-              } catch (updateError) {
-                console.error('Failed to update comment with API data:', updateError)
+      commentsApi.create(designId, newComment, userId)
+        .then(apiComment => {
+          console.log('Comment created via API:', apiComment.id)
+          
+          // 更新本地存储中的评论ID（如果API返回了不同的ID）
+          if (typeof window !== 'undefined') {
+            try {
+              const currentComments = JSON.parse(localStorage.getItem("petcraft_comments") || "[]")
+              const index = currentComments.findIndex((c: Comment) => c.id === localComment.id)
+              if (index !== -1) {
+                currentComments[index] = { ...apiComment, user_name: 'You' }
+                localStorage.setItem("petcraft_comments", JSON.stringify(currentComments))
+                
+                // 更新UI状态
+                setComments(prev => prev.map(c => c.id === localComment.id ? { ...apiComment, user_name: 'You' } : c))
               }
+            } catch (updateError) {
+              console.error('Failed to update comment with API data:', updateError)
             }
-          })
-          .catch(apiError => {
-            console.error('API comment creation failed, but local comment is saved:', apiError)
-          })
-      }
+          }
+        })
+        .catch(apiError => {
+          console.error('API comment creation failed, but local comment is saved:', apiError)
+        })
       
     } catch (error) {
       console.error('Failed to create comment:', error)
