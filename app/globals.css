@@ -150,3 +150,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .progress-bar-shimmer {
+    animation: progress-shimmer 1.5s ease-in-out infinite;
+  }
+  
+  @keyframes progress-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+}

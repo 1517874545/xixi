@@ -10,7 +10,8 @@ export interface Design {
   title: string
   user_id: string
   user_name?: string
-  components: {
+  design_type?: 'svg' | 'ai_image' // 新增：设计类型，默认为'svg'
+  components?: {
     body: string
     ears: string
     eyes: string
@@ -21,6 +22,12 @@ export interface Design {
     bodyColor?: string
     earsColor?: string
     accessoriesColor?: string
+  }
+  image_url?: string // 新增：AI生成的图片URL
+  ai_metadata?: { // 新增：AI生成元数据
+    prompt: string
+    model: string
+    generated_at: string
   }
   is_public: boolean
   created_at: string

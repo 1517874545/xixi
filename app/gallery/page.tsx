@@ -8,7 +8,9 @@ import { type Design } from "@/lib/mock-data"
 import { User, MessageCircle, Heart } from "lucide-react"
 import { designsApi } from "@/lib/api"
 import { FollowButton } from "@/components/follow-button"
+import { FavoriteButton } from "@/components/favorite-button"
 import { useAuthApi } from "@/lib/auth-api-context"
+import { DesignPreview } from "@/components/design-preview"
 
 export default function GalleryPage() {
   const router = useRouter()
@@ -22,7 +24,8 @@ export default function GalleryPage() {
     tags: [],
     sortBy: "newest",
     componentType: undefined,
-    color: undefined
+    color: undefined,
+    designType: undefined
   })
 
   // 合并设计数据，优先使用最新的数据
@@ -91,6 +94,19 @@ export default function GalleryPage() {
          design.components.earsColor === filterOptions.color ||
          design.components.accessoriesColor === filterOptions.color)
       )
+    }
+
+    // 作品类型过滤（AI 或 SVG）
+    if (filterOptions.designType) {
+      if (filterOptions.designType === "ai") {
+        // 只显示 AI 创作的作品
+        filtered = filtered.filter(design => design.design_type === "ai_image")
+      } else if (filterOptions.designType === "svg") {
+        // 显示 SVG 设计（包括没有 design_type 的旧作品，默认为 SVG）
+        filtered = filtered.filter(design => 
+          design.design_type !== "ai_image"
+        )
+      }
     }
 
     // 排序
@@ -281,77 +297,13 @@ export default function GalleryPage() {
                 className="p-4 hover:shadow-lg transition-all cursor-pointer group"
                 onClick={() => router.push(`/design/${design.id}`)}
               >
-                <svg
-                  viewBox="0 0 300 300"
-                  className="w-full h-48 mb-4 bg-muted rounded-lg group-hover:scale-105 transition-transform"
-                >
-                  {/* Background */}
-                  {design.components?.background && (
-                    <g
-                      dangerouslySetInnerHTML={{
-                        __html: components.find((c) => c.id === design.components?.background)?.svg_data || "",
-                      }}
-                      style={{ color: design.components?.bodyColor }}
-                    />
-                  )}
-
-                  {/* Body */}
-                  {design.components?.body && (
-                    <g
-                      dangerouslySetInnerHTML={{
-                        __html: components.find((c) => c.id === design.components?.body)?.svg_data || "",
-                      }}
-                      style={{ color: design.components?.bodyColor }}
-                    />
-                  )}
-
-                  {/* Ears */}
-                  {design.components?.ears && (
-                    <g
-                      dangerouslySetInnerHTML={{
-                        __html: components.find((c) => c.id === design.components?.ears)?.svg_data || "",
-                      }}
-                      style={{ color: design.components?.earsColor || design.components?.bodyColor }}
-                    />
-                  )}
-
-                  {/* Eyes */}
-                  {design.components?.eyes && (
-                    <g
-                      dangerouslySetInnerHTML={{
-                        __html: components.find((c) => c.id === design.components?.eyes)?.svg_data || "",
-                      }}
-                    />
-                  )}
-
-                  {/* Nose */}
-                  {design.components?.nose && (
-                    <g
-                      dangerouslySetInnerHTML={{
-                        __html: components.find((c) => c.id === design.components?.nose)?.svg_data || "",
-                      }}
-                    />
-                  )}
-
-                  {/* Mouth */}
-                  {design.components?.mouth && (
-                    <g
-                      dangerouslySetInnerHTML={{
-                        __html: components.find((c) => c.id === design.components?.mouth)?.svg_data || "",
-                      }}
-                    />
-                  )}
-
-                  {/* Accessories */}
-                  {design.components?.accessories && (
-                    <g
-                      dangerouslySetInnerHTML={{
-                        __html: components.find((c) => c.id === design.components?.accessories)?.svg_data || "",
-                      }}
-                      style={{ color: design.components?.accessoriesColor || "#000000" }}
-                    />
-                  )}
-                </svg>
+                <div className="mb-4 group-hover:scale-105 transition-transform">
+                  <DesignPreview 
+                    design={design} 
+                    components={components}
+                    className="group-hover:scale-105 transition-transform"
+                  />
+                </div>
 
                 <div className="space-y-3">
                   <div>
@@ -389,14 +341,19 @@ export default function GalleryPage() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-4 pt-2 border-t text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Heart className="h-4 w-4" />
-                      <span>{design.likes_count || 0}</span>
+                  <div className="flex items-center justify-between pt-2 border-t text-sm text-muted-foreground">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1">
+                        <Heart className="h-4 w-4" />
+                        <span>{design.likes_count || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <MessageCircle className="h-4 w-4" />
+                        <span>{design.comments_count || 0}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <MessageCircle className="h-4 w-4" />
-                      <span>{design.comments_count || 0}</span>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <FavoriteButton designId={design.id} className="h-8 w-8" />
                     </div>
                   </div>
                 </div>

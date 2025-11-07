@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Search, Filter, X, Tag } from "lucide-react"
+import { Search, Filter, X, Tag, Sparkles } from "lucide-react"
 
 interface SearchFilterProps {
   onSearch: (query: string) => void
@@ -18,6 +18,7 @@ export interface FilterOptions {
   sortBy: "newest" | "popular" | "oldest"
   componentType?: string
   color?: string
+  designType?: "all" | "ai" | "svg"
 }
 
 export default function SearchFilter({ onSearch, onFilter, availableTags }: SearchFilterProps) {
@@ -27,6 +28,7 @@ export default function SearchFilter({ onSearch, onFilter, availableTags }: Sear
   const [sortBy, setSortBy] = useState<"newest" | "popular" | "oldest">("newest")
   const [componentType, setComponentType] = useState("")
   const [color, setColor] = useState("")
+  const [designType, setDesignType] = useState<"all" | "ai" | "svg">("all")
 
   const handleSearch = () => {
     onSearch(searchQuery)
@@ -37,7 +39,8 @@ export default function SearchFilter({ onSearch, onFilter, availableTags }: Sear
       tags: selectedTags,
       sortBy,
       componentType: componentType || undefined,
-      color: color || undefined
+      color: color || undefined,
+      designType: designType !== "all" ? designType : undefined
     })
   }
 
@@ -54,13 +57,15 @@ export default function SearchFilter({ onSearch, onFilter, availableTags }: Sear
     setSortBy("newest")
     setComponentType("")
     setColor("")
+    setDesignType("all")
     setSearchQuery("")
     onSearch("")
     onFilter({
       tags: [],
       sortBy: "newest",
       componentType: undefined,
-      color: undefined
+      color: undefined,
+      designType: undefined
     })
   }
 
@@ -157,11 +162,13 @@ export default function SearchFilter({ onSearch, onFilter, availableTags }: Sear
 
           {/* 组件类型筛选 */}
           <div>
-            <label className="text-sm font-medium mb-2 block">组件类型</label>
+            <label htmlFor="component-type-select" className="text-sm font-medium mb-2 block">组件类型</label>
             <select 
+              id="component-type-select"
               value={componentType}
               onChange={(e) => setComponentType(e.target.value)}
               className="w-full p-2 border rounded-md"
+              aria-label="选择组件类型"
             >
               <option value="">所有类型</option>
               {componentTypes.map(type => (
@@ -174,12 +181,14 @@ export default function SearchFilter({ onSearch, onFilter, availableTags }: Sear
 
           {/* 颜色筛选 */}
           <div>
-            <label className="text-sm font-medium mb-2 block">主要颜色</label>
-            <div className="flex flex-wrap gap-2">
+            <label htmlFor="color-select" className="text-sm font-medium mb-2 block">主要颜色</label>
+            <div className="flex flex-wrap gap-2 items-center">
               <select 
+                id="color-select"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 className="p-2 border rounded-md"
+                aria-label="选择主要颜色"
               >
                 <option value="">所有颜色</option>
                 {colors.map(color => (
@@ -192,8 +201,42 @@ export default function SearchFilter({ onSearch, onFilter, availableTags }: Sear
                 <div 
                   className="w-8 h-8 rounded border"
                   style={{ backgroundColor: color }}
+                  role="img"
+                  aria-label={`已选择的颜色: ${color}`}
                 />
               )}
+            </div>
+          </div>
+
+          {/* 作品类型筛选 */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">作品类型</label>
+            <div className="flex gap-2">
+              <Button
+                variant={designType === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDesignType("all")}
+                className="flex items-center gap-1"
+              >
+                全部
+              </Button>
+              <Button
+                variant={designType === "ai" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDesignType("ai")}
+                className="flex items-center gap-1"
+              >
+                <Sparkles className="h-3 w-3" />
+                AI创作
+              </Button>
+              <Button
+                variant={designType === "svg" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDesignType("svg")}
+                className="flex items-center gap-1"
+              >
+                SVG设计
+              </Button>
             </div>
           </div>
 
@@ -204,8 +247,8 @@ export default function SearchFilter({ onSearch, onFilter, availableTags }: Sear
       )}
 
       {/* 当前筛选状态 */}
-      {(selectedTags.length > 0 || searchQuery || sortBy !== "newest" || componentType || color) && (
-        <div className="flex items-center gap-2 text-sm">
+      {(selectedTags.length > 0 || searchQuery || sortBy !== "newest" || componentType || color || designType !== "all") && (
+        <div className="flex items-center gap-2 text-sm flex-wrap">
           <span className="text-muted-foreground">当前筛选:</span>
           {searchQuery && (
             <Badge variant="secondary">搜索: {searchQuery}</Badge>
@@ -223,6 +266,12 @@ export default function SearchFilter({ onSearch, onFilter, availableTags }: Sear
           )}
           {color && (
             <Badge variant="secondary">颜色: {color}</Badge>
+          )}
+          {designType !== "all" && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              {designType === "ai" && <Sparkles className="h-3 w-3" />}
+              {designType === "ai" ? "AI创作" : "SVG设计"}
+            </Badge>
           )}
           <Button variant="ghost" size="sm" onClick={clearFilters} className="flex items-center gap-1">
             <X className="h-3 w-3" />

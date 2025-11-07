@@ -8,10 +8,13 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { type Component, type Design } from "@/lib/mock-data"
-import { Save, Download, Globe } from "lucide-react"
+import { Save, Download, Globe, Sparkles, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { designsApi } from "@/lib/api"
 import ExportButton from "@/components/export-button"
+import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { TagInput } from "@/components/tag-input"
 
 export default function EditorPage() {
   const { user } = useAuthApi()
@@ -38,7 +41,13 @@ export default function EditorPage() {
   })
   const [title, setTitle] = useState("")
   const [isPublic, setIsPublic] = useState(false)
-  const [activeTab, setActiveTab] = useState<Component["type"]>("body")
+  const [tags, setTags] = useState<string[]>([])
+  const [activeTab, setActiveTab] = useState<Component["type"] | "ai">("body")
+  
+  // AI创作相关状态
+  const [aiPrompt, setAiPrompt] = useState("")
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiGeneratedImageUrl, setAiGeneratedImageUrl] = useState<string | null>(null)
 
   const presetColors = [
     "#fbbf24", // amber
@@ -161,7 +170,7 @@ export default function EditorPage() {
     
     if (!userId) {
       // 检查本地存储是否有临时用户ID
-      userId = localStorage.getItem('temp_user_id')
+      userId = localStorage.getItem('temp_user_id') || undefined
       
       if (!userId) {
         // 创建临时用户ID
@@ -221,6 +230,26 @@ export default function EditorPage() {
       }
       
       console.log('Design saved successfully:', savedDesign)
+      
+      // 保存标签（如果有）
+      if (tags.length > 0 && savedDesign.id) {
+        try {
+          await fetch('/api/tags', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              designId: savedDesign.id,
+              tagNames: tags
+            })
+          })
+          console.log('Tags saved successfully')
+        } catch (tagError) {
+          console.error('Failed to save tags:', tagError)
+          // 标签保存失败不影响设计保存，只记录错误
+        }
+      }
       
       // 确保设计数据也保存到本地存储，作为备份
       if (typeof window !== 'undefined') {
@@ -306,6 +335,214 @@ export default function EditorPage() {
     link.download = `${title || "pet-illustration"}.svg`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  // AI生成图片
+  const handleAIGenerate = async () => {
+    if (!aiPrompt.trim()) {
+      toast({
+        title: "请输入描述",
+        description: "请描述你想生成的宠物设计",
+        variant: "destructive"
+      })
+      return
+    }
+
+    let userId = user?.id
+    if (!userId) {
+      userId = localStorage.getItem('temp_user_id') || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      localStorage.setItem('temp_user_id', userId)
+    }
+
+    setAiGenerating(true)
+    try {
+      const response = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: aiPrompt.trim(),
+          userId: userId,
+        }),
+      })
+
+      // 先获取响应文本（只能读取一次）
+      const responseText = await response.text()
+      console.log('AI generation response text:', responseText)
+      
+      // 尝试解析 JSON
+      let data
+      try {
+        data = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error('Failed to parse response JSON:', parseError)
+        console.error('Response text:', responseText.substring(0, 200))
+        throw new Error('服务器返回了无效的响应格式')
+      }
+
+      // 检查响应状态
+      if (!response.ok) {
+        throw new Error(data.error || `生成失败: ${response.status}`)
+      }
+
+      // 检查数据是否成功
+      if (data.success && data.imageUrl) {
+        setAiGeneratedImageUrl(data.imageUrl)
+        
+        // 自动设置标题（如果还没有）
+        if (!title) {
+          setTitle(aiPrompt.slice(0, 30))
+        }
+        
+        toast({
+          title: "生成成功！",
+          description: "图片已生成，可以保存了",
+        })
+      } else {
+        throw new Error(data.error || '生成失败')
+      }
+    } catch (error) {
+      console.error('AI generation error:', error)
+      toast({
+        title: "生成失败",
+        description: error instanceof Error ? error.message : '请稍后重试',
+        variant: "destructive"
+      })
+    } finally {
+      setAiGenerating(false)
+    }
+  }
+
+  // 保存AI生成的设计
+  const handleSaveAIDesign = async () => {
+    if (!aiGeneratedImageUrl) {
+      toast({
+        title: "没有可保存的图片",
+        description: "请先生成图片",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // AI设计必须登录才能保存
+    if (!user?.id) {
+      toast({
+        title: "请先登录",
+        description: "保存AI设计需要登录账户。请先注册或登录。",
+        variant: "destructive"
+      })
+      // 可选：跳转到登录页面
+      setTimeout(() => {
+        router.push('/login')
+      }, 1500)
+      return
+    }
+
+    const userId = user.id
+
+    if (!title.trim()) {
+      toast({
+        title: "标题不能为空",
+        description: "请为您的设计输入一个标题",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      // 先上传图片到Supabase Storage（如果还没有）
+      let finalImageUrl = aiGeneratedImageUrl
+      
+      try {
+        const uploadResponse = await fetch('/api/ai/upload-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            imageUrl: aiGeneratedImageUrl,
+            userId: userId,
+          }),
+        })
+
+        if (uploadResponse.ok) {
+          const uploadData = await uploadResponse.json()
+          if (uploadData.url) {
+            finalImageUrl = uploadData.url
+          }
+        }
+      } catch (uploadError) {
+        console.warn('Image upload failed, using original URL:', uploadError)
+        // 如果上传失败，使用原始URL
+      }
+
+      // 保存到数据库
+      const design = {
+        title,
+        user_id: userId,
+        design_type: 'ai_image' as const,
+        image_url: finalImageUrl,
+        ai_metadata: {
+          prompt: aiPrompt,
+          model: 'doubao-seedream-4-0-250828',
+          generated_at: new Date().toISOString(),
+        },
+        is_public: isPublic,
+      }
+
+      console.log('Saving AI design to database:', design)
+      const savedDesign = await designsApi.create(design)
+      console.log('Design saved successfully:', savedDesign)
+      
+      if (!savedDesign || !savedDesign.id) {
+        throw new Error('保存失败：服务器未返回有效的设计数据')
+      }
+      
+      toast({
+        title: "设计已保存",
+        description: "您的AI设计已成功保存",
+      })
+      
+      // 保存标签（如果有）
+      if (tags.length > 0 && savedDesign.id) {
+        try {
+          await fetch('/api/tags', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              designId: savedDesign.id,
+              tagNames: tags
+            })
+          })
+          console.log('Tags saved successfully')
+        } catch (tagError) {
+          console.error('Failed to save tags:', tagError)
+          // 标签保存失败不影响设计保存，只记录错误
+        }
+      }
+
+      // 清空AI相关状态
+      setAiPrompt("")
+      setAiGeneratedImageUrl(null)
+      
+      // 等待更长时间确保数据库同步
+      setTimeout(() => {
+        router.push("/my-designs")
+        // 强制刷新页面以确保获取最新数据
+        router.refresh()
+      }, 1000)
+    } catch (error) {
+      console.error('Failed to save AI design:', error)
+      const errorMessage = error instanceof Error ? error.message : '保存失败，请重试'
+      toast({
+        title: "保存失败",
+        description: errorMessage,
+        variant: "destructive"
+      })
+    }
   }
 
   if (loading) {
@@ -427,6 +664,18 @@ export default function EditorPage() {
                   />
                 </div>
 
+                {/* 标签输入 */}
+                <div>
+                  <Label htmlFor="tags">Tags (optional)</Label>
+                  <TagInput
+                    value={tags}
+                    onChange={setTags}
+                    placeholder="添加标签（如：可爱、猫咪、卡通）"
+                    maxTags={10}
+                    showSuggestions={true}
+                  />
+                </div>
+
                 <div className="space-y-4">
                   <h3 className="font-semibold text-sm">Customize Colors</h3>
 
@@ -542,6 +791,7 @@ export default function EditorPage() {
                       checked={isPublic}
                       onChange={(e) => setIsPublic(e.target.checked)}
                       className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      aria-label="发布到社区画廊"
                     />
                     <Label htmlFor="is-public" className="flex items-center gap-2 cursor-pointer">
                       <Globe className="h-4 w-4" />
@@ -568,7 +818,7 @@ export default function EditorPage() {
                         title: title || "未命名设计",
                         components: selectedComponents
                       }}
-                      svgElement={document.getElementById("pet-canvas") as SVGSVGElement}
+                      svgElement={document.getElementById("pet-canvas") as unknown as SVGSVGElement}
                     />
                   </div>
                 </div>
@@ -579,54 +829,196 @@ export default function EditorPage() {
           {/* Component Selector */}
           <div className="space-y-4">
             <Card className="p-4">
-              <h2 className="font-semibold mb-4">Choose Components</h2>
+              <Tabs value={activeTab === "ai" ? "ai" : "components"} onValueChange={(v) => {
+                if (v === "ai") {
+                  setActiveTab("ai")
+                } else {
+                  setActiveTab(v as Component["type"])
+                }
+              }}>
+                <TabsList className="w-full mb-4">
+                  <TabsTrigger value="components" className="flex-1">组件</TabsTrigger>
+                  <TabsTrigger value="ai" className="flex-1 gap-1">
+                    <Sparkles className="h-4 w-4" />
+                    AI创作
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* Tabs */}
-              <div className="flex flex-wrap gap-1 mb-4">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
-                      activeTab === tab
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
+                <TabsContent value="components">
+                  <h2 className="font-semibold mb-4">Choose Components</h2>
 
-              {/* Component Grid */}
-              <div className="grid grid-cols-2 gap-3 max-h-[600px] overflow-y-auto">
-                {componentsByType[activeTab]?.map((component) => (
-                  <button
-                    key={component.id}
-                    onClick={() => setSelectedComponents((prev) => ({ ...prev, [activeTab]: component.id }))}
-                    className={`p-4 border-2 rounded-lg transition-all hover:border-primary ${
-                      selectedComponents[activeTab] === component.id ? "border-primary bg-primary/5" : "border-border"
-                    }`}
-                  >
-                    <svg viewBox="0 0 300 300" className="w-full h-24">
-                      <g
-                        dangerouslySetInnerHTML={{ __html: component.svg_data }}
-                        style={{
-                          color:
-                            activeTab === "body"
-                              ? colors.body
-                              : activeTab === "ears"
-                                ? colors.ears
-                                : activeTab === "accessories"
-                                  ? colors.accessories
-                                  : undefined,
-                        }}
+                  {/* Component Type Tabs */}
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {tabs.map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
+                          activeTab === tab
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Component Grid */}
+                  <div className="grid grid-cols-2 gap-3 max-h-[600px] overflow-y-auto">
+                    {componentsByType[activeTab]?.map((component) => (
+                      <button
+                        key={component.id}
+                        onClick={() => setSelectedComponents((prev) => ({ ...prev, [activeTab]: component.id }))}
+                        className={`p-4 border-2 rounded-lg transition-all hover:border-primary ${
+                          selectedComponents[activeTab] === component.id ? "border-primary bg-primary/5" : "border-border"
+                        }`}
+                      >
+                        <svg viewBox="0 0 300 300" className="w-full h-24">
+                          <g
+                            dangerouslySetInnerHTML={{ __html: component.svg_data }}
+                            style={{
+                              color:
+                                activeTab === "body"
+                                  ? colors.body
+                                  : activeTab === "ears"
+                                    ? colors.ears
+                                    : activeTab === "accessories"
+                                      ? colors.accessories
+                                      : undefined,
+                            }}
+                          />
+                        </svg>
+                        <p className="text-xs mt-2 font-medium">{component.name}</p>
+                      </button>
+                    ))}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="ai" className="space-y-4">
+                  <h2 className="font-semibold mb-4">AI 智能创作</h2>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="ai-prompt">描述你想生成的宠物</Label>
+                      <Textarea
+                        id="ai-prompt"
+                        placeholder="例如：一只可爱的橙色小猫，大眼睛，戴着粉色蝴蝶结，卡通风格"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        rows={4}
+                        className="mt-2"
+                        disabled={aiGenerating}
                       />
-                    </svg>
-                    <p className="text-xs mt-2 font-medium">{component.name}</p>
-                  </button>
-                ))}
-              </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        详细描述你想要的宠物外观、颜色、表情等
+                      </p>
+                    </div>
+
+                    <Button
+                      onClick={handleAIGenerate}
+                      disabled={aiGenerating || !aiPrompt.trim()}
+                      className="w-full"
+                    >
+                      {aiGenerating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          生成设计
+                        </>
+                      )}
+                    </Button>
+
+                    {aiGeneratedImageUrl && (
+                      <div className="space-y-4">
+                        <div className="border-2 border-border rounded-lg p-4">
+                          <Label className="mb-2 block">生成的图片预览</Label>
+                          <img
+                            src={aiGeneratedImageUrl}
+                            alt="AI生成的设计"
+                            className="w-full rounded-lg"
+                          />
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleSaveAIDesign}
+                            className="flex-1"
+                            variant="default"
+                          >
+                            <Save className="h-4 w-4 mr-2" />
+                            保存设计
+                          </Button>
+                          <Button
+                            onClick={async () => {
+                              if (!aiGeneratedImageUrl) return
+                              
+                              try {
+                                toast({
+                                  title: "准备下载",
+                                  description: "正在获取图片...",
+                                })
+                                
+                                // 方法1：直接使用 URL（适用于同域或允许跨域的图片）
+                                const link = document.createElement('a')
+                                link.href = aiGeneratedImageUrl
+                                link.download = `${title || 'ai-pet-illustration'}-${Date.now()}.png`
+                                link.target = '_blank'
+                                
+                                // 尝试通过 fetch 获取图片（处理跨域情况）
+                                try {
+                                  const response = await fetch(aiGeneratedImageUrl, { mode: 'cors' })
+                                  if (response.ok) {
+                                    const blob = await response.blob()
+                                    const blobUrl = URL.createObjectURL(blob)
+                                    link.href = blobUrl
+                                    
+                                    document.body.appendChild(link)
+                                    link.click()
+                                    document.body.removeChild(link)
+                                    
+                                    // 清理 blob URL
+                                    setTimeout(() => URL.revokeObjectURL(blobUrl), 100)
+                                  } else {
+                                    throw new Error('Fetch failed')
+                                  }
+                                } catch (fetchError) {
+                                  // 如果 fetch 失败（跨域等），直接使用原始链接
+                                  console.warn('Fetch failed, using direct link:', fetchError)
+                                  document.body.appendChild(link)
+                                  link.click()
+                                  document.body.removeChild(link)
+                                }
+                                
+                                toast({
+                                  title: "下载成功",
+                                  description: "图片已开始下载",
+                                })
+                              } catch (error) {
+                                console.error('Download error:', error)
+                                toast({
+                                  title: "下载失败",
+                                  description: "请尝试右键图片另存为",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                            variant="outline"
+                            className="gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            下载
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
             </Card>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Sparkles, Palette, Share2, Heart } from "lucide-react"
+import { Sparkles, Palette, Share2, Heart, Wand2 } from "lucide-react"
 
 export default function HomePage() {
   return (
@@ -34,7 +34,7 @@ export default function HomePage() {
       {/* Features Section */}
       <section className="py-16">
         <h2 className="text-3xl font-bold text-center mb-12">How It Works</h2>
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
           <Card className="p-6 text-center">
             <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
               <Palette className="h-6 w-6 text-primary" />
@@ -49,6 +49,14 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-semibold mb-2">Customize Colors</h3>
             <p className="text-muted-foreground">Pick your favorite colors to make your pet truly unique</p>
+          </Card>
+
+          <Card className="p-6 text-center">
+            <div className="w-12 h-12 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Wand2 className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">AI Creation</h3>
+            <p className="text-muted-foreground">Use AI to generate unique pet illustrations with just a text description</p>
           </Card>
 
           <Card className="p-6 text-center">

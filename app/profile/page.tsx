@@ -9,6 +9,7 @@ import { User, Heart, Star, Users } from "lucide-react"
 import { designsApi, likesApi } from "@/lib/api"
 import { useAuthApi } from "@/lib/auth-api-context"
 import { FollowButton } from "@/components/follow-button"
+import { DesignPreview } from "@/components/design-preview"
 
 export default function ProfilePage() {
   const { user } = useAuthApi()
@@ -56,15 +57,16 @@ export default function ProfilePage() {
         // 加载当前用户的所有设计
         const userDesignsFromApi = await designsApi.getAll({ userId: currentUser })
         console.log('=== Profile Page: Loading Designs ===')
+        console.log('Current user:', currentUser)
         console.log('Loaded designs from API:', userDesignsFromApi.length)
-        console.log('Raw API response:', userDesignsFromApi)
-        console.log('Designs with counts:', userDesignsFromApi.map(d => ({ 
-          id: d.id, 
-          title: d.title, 
+        console.log('All designs:', userDesignsFromApi.map(d => ({
+          id: d.id,
+          title: d.title,
+          design_type: d.design_type,
+          image_url: d.image_url ? 'has_url' : 'no_url',
+          has_components: !!d.components,
           likes_count: d.likes_count,
-          comments_count: d.comments_count,
-          has_likes_count: 'likes_count' in d,
-          has_comments_count: 'comments_count' in d
+          comments_count: d.comments_count
         })))
         
         // 合并API数据和本地存储数据，优先使用最新的数据
@@ -382,60 +384,13 @@ export default function ProfilePage() {
   const renderDesignCard = (design: Design) => (
     <Link key={design.id} href={`/design/${design.id}`}>
       <Card className="p-4 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02]">
-        <svg viewBox="0 0 300 300" className="w-full h-48 mb-4 bg-muted rounded-lg">
-          {design.components?.background && (
-            <g
-              dangerouslySetInnerHTML={{
-                __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
-              }}
-              style={{ color: design.components?.bodyColor }}
-            />
-          )}
-          {design.components?.body && (
-            <g
-              dangerouslySetInnerHTML={{
-                __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
-              }}
-              style={{ color: design.components?.bodyColor }}
-            />
-          )}
-          {design.components?.ears && (
-            <g
-              dangerouslySetInnerHTML={{
-                __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
-              }}
-              style={{ color: design.components?.bodyColor }}
-            />
-          )}
-          {design.components?.eyes && (
-            <g
-              dangerouslySetInnerHTML={{
-                __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
-              }}
-            />
-          )}
-          {design.components?.nose && (
-            <g
-              dangerouslySetInnerHTML={{
-                __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
-              }}
-            />
-          )}
-          {design.components?.mouth && (
-            <g
-              dangerouslySetInnerHTML={{
-                __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
-              }}
-            />
-          )}
-          {design.components?.accessories && (
-            <g
-              dangerouslySetInnerHTML={{
-                __html: mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
-              }}
-            />
-          )}
-        </svg>
+        <div className="mb-4">
+          <DesignPreview 
+            design={design} 
+            components={mockComponents}
+            className="hover:scale-105 transition-transform"
+          />
+        </div>
         <div>
           <h3 className="font-semibold mb-1">{design.title}</h3>
           <p className="text-sm text-muted-foreground">{design.user_name || "Anonymous"}</p>

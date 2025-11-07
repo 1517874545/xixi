@@ -4,10 +4,10 @@ import { createSupabaseClient, createServiceClient, createAuthenticatedClient, g
 // 获取单个设计的端点
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     
     if (!id) {
       return NextResponse.json({ error: 'Design ID is required' }, { status: 400 })
@@ -110,10 +110,10 @@ export async function GET(
 // 更新设计的端点
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { title, components, is_public } = body
 
@@ -191,10 +191,10 @@ export async function PUT(
 // 删除设计的端点
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     if (!id) {
       return NextResponse.json({ error: 'Design ID is required' }, { status: 400 })

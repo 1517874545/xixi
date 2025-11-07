@@ -96,7 +96,8 @@ export const designsApi = {
     return data.design
   },
 
-  async create(design: Omit<Design, 'id' | 'created_at' | 'likes_count' | 'comments_count'> & { user_id: string }): Promise<Design> {
+  async create(design: Omit<Design, 'id' | 'created_at' | 'likes_count' | 'comments_count'> & { user_id: string; design_type?: 'svg' | 'ai_image'; image_url?: string; ai_metadata?: any }): Promise<Design> {
+    console.log('API: Creating design:', design)
     const response = await fetch(`${API_BASE_URL}/designs`, {
       method: 'POST',
       headers: {
@@ -104,19 +105,34 @@ export const designsApi = {
       },
       body: JSON.stringify(design),
     })
+    
+    console.log('API: Response status:', response.status, response.statusText)
+    
     if (!response.ok) {
       let errorMessage = '保存设计失败'
+      let errorDetails: any = null
       try {
         const errorData = await response.json()
         errorMessage = errorData.error || errorMessage
+        errorDetails = errorData.details || null
+        console.error('API Error Response:', errorData)
       } catch {
         const errorText = await response.text()
         errorMessage = errorText || errorMessage
+        console.error('API Error Text:', errorText)
       }
-      console.error('Failed to create design:', errorMessage)
+      console.error('Failed to create design:', errorMessage, errorDetails)
       throw new Error(errorMessage)
     }
+    
     const data = await response.json()
+    console.log('API: Response data:', data)
+    
+    if (!data.design) {
+      console.error('API: No design in response:', data)
+      throw new Error('服务器响应格式错误：未返回设计数据')
+    }
+    
     return data.design
   },
 
