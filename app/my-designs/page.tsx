@@ -1,19 +1,21 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAuth } from "@/lib/auth-context"
+import { useAuthApi } from "@/lib/auth-api-context"
 import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { mockComponents, type Design } from "@/lib/mock-data"
+import { type Design } from "@/lib/mock-data"
 import { Trash2, Eye, EyeOff, Edit, Share2, Heart, MessageCircle, TrendingUp, Calendar } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { designsApi } from "@/lib/api"
+import { DesignPreview } from "@/components/design-preview"
+import { PageLoader } from "@/components/page-loader"
 
 export default function MyDesignsPage() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuthApi()
   const router = useRouter()
   const { toast } = useToast()
   const [designs, setDesigns] = useState<Design[]>([])
@@ -21,24 +23,61 @@ export default function MyDesignsPage() {
   const [sortBy, setSortBy] = useState<"date" | "likes">("date")
   const [filterBy, setFilterBy] = useState<"all" | "public" | "private">("all")
   const [loading, setLoading] = useState(true)
+  const [components, setComponents] = useState<any[]>([])
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    // 加载组件数据
+    const fetchComponents = async () => {
+      try {
+        const response = await fetch('/api/components')
+        if (response.ok) {
+          const data = await response.json()
+          setComponents(data.components || [])
+        }
+      } catch (error) {
+        console.error('Error fetching components:', error)
+      }
+    }
+    
+    fetchComponents()
+  }, [])
+
+  useEffect(() => {
+    // 检查是否有临时用户ID
+    const tempUserId = localStorage.getItem('temp_user_id')
+    
+    // 如果没有用户且没有临时用户ID，跳转到登录页面
+    if (!authLoading && !user && !tempUserId) {
       router.push("/login")
       return
     }
 
-    if (user) {
+    // 如果有用户或临时用户ID，加载设计
+    if (user || tempUserId) {
       loadDesigns()
     }
   }, [user, authLoading, router])
+
+  // 当页面可见时重新加载设计（确保获取最新数据）
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && (user || localStorage.getItem('temp_user_id'))) {
+        console.log('Page became visible, reloading designs...')
+        loadDesigns()
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [user])
 
   const loadDesigns = async () => {
     try {
       setLoading(true)
       
-      // 获取当前用户ID
-      const currentUser = user?.id || 'demo-user'
+      // 获取当前用户ID（优先使用真实用户ID，其次使用临时用户ID）
+      const tempUserId = localStorage.getItem('temp_user_id')
+      const currentUser = user?.id || tempUserId || 'demo-user'
       
       // 首先检查本地存储是否有最新数据
       let latestDesigns = []
@@ -58,10 +97,49 @@ export default function MyDesignsPage() {
       // 加载当前用户的所有设计
       const userDesigns = await designsApi.getAll({ userId: currentUser })
       
+      console.log('=== My Designs Page: Loading Designs ===')
+      console.log('Current user:', currentUser)
       console.log('Loaded designs from API:', userDesigns.length)
+      console.log('All designs (full):', userDesigns)
+      const designsSummary = userDesigns.map(d => ({
+        id: d.id,
+        title: d.title,
+        design_type: d.design_type || 'svg',
+        image_url: d.image_url ? 'has_url: ' + d.image_url.substring(0, 50) + '...' : 'no_url',
+        has_components: !!d.components,
+        is_public: d.is_public,
+        user_id: d.user_id
+      }))
+      console.log('All designs (summary):', designsSummary)
+      
+      const aiCount = designsSummary.filter(d => d.design_type === 'ai_image').length
+      const svgCount = designsSummary.filter(d => d.design_type === 'svg' || !d.design_type).length
+      
+      console.log('📊 Design Types Summary:')
+      console.log('  - AI designs count:', aiCount)
+      console.log('  - SVG designs count:', svgCount)
+      console.log('  - Total designs:', designsSummary.length)
+      
+      if (designsSummary.some(d => d.design_type === 'ai_image')) {
+        const aiDesigns = designsSummary.filter(d => d.design_type === 'ai_image')
+        console.log('✅ AI designs found:', aiDesigns)
+        console.log('   Details:', aiDesigns.map(d => ({ id: d.id, title: d.title, image_url: d.image_url })))
+      } else {
+        console.warn('⚠️ No AI designs found in API response')
+        console.log('   All designs are:', designsSummary.map(d => ({ id: d.id, title: d.title, design_type: d.design_type })))
+      }
       
       // 合并API数据和本地存储数据，优先使用最新的数据
+      console.log('Before merge - API designs:', userDesigns.length)
+      console.log('Before merge - Local designs:', latestDesigns.length)
       const mergedDesigns = mergeDesigns(userDesigns, latestDesigns)
+      console.log('After merge - Total designs:', mergedDesigns.length)
+      console.log('Merged designs summary:', mergedDesigns.map(d => ({
+        id: d.id,
+        title: d.title,
+        design_type: d.design_type || 'svg',
+        source: 'merged'
+      })))
       
       // 从本地存储中获取最新的点赞和评论数据
       if (typeof window !== 'undefined') {
@@ -99,7 +177,8 @@ export default function MyDesignsPage() {
       if (typeof window !== 'undefined') {
         try {
           const savedDesigns = JSON.parse(localStorage.getItem("petcraft_designs") || "[]")
-          const currentUser = user?.id || 'demo-user'
+          const tempUserId = localStorage.getItem('temp_user_id')
+          const currentUser = user?.id || tempUserId || 'demo-user'
           
           // 只显示当前用户的设计
           const userSavedDesigns = savedDesigns.filter((d: any) => d.user_id === currentUser)
@@ -137,12 +216,26 @@ export default function MyDesignsPage() {
   useEffect(() => {
     let filtered = [...designs]
 
+    console.log('=== Filtering Designs ===')
+    console.log('Total designs before filter:', filtered.length)
+    console.log('Filter by:', filterBy)
+    console.log('Sort by:', sortBy)
+    console.log('All designs types:', filtered.map(d => ({
+      id: d.id,
+      title: d.title,
+      design_type: d.design_type || 'svg',
+      is_public: d.is_public,
+      created_at: d.created_at
+    })))
+
     // Filter by visibility
     if (filterBy === "public") {
       filtered = filtered.filter((d) => d.is_public)
     } else if (filterBy === "private") {
       filtered = filtered.filter((d) => !d.is_public)
     }
+
+    console.log('After visibility filter:', filtered.length)
 
     // Sort
     if (sortBy === "likes") {
@@ -151,6 +244,11 @@ export default function MyDesignsPage() {
       filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     }
 
+    console.log('Final filtered designs:', filtered.map(d => ({
+      id: d.id,
+      title: d.title,
+      design_type: d.design_type || 'svg'
+    })))
     setFilteredDesigns(filtered)
   }, [designs, sortBy, filterBy])
 
@@ -353,7 +451,7 @@ export default function MyDesignsPage() {
   const publicCount = designs.filter((d) => d.is_public).length
 
   if (loading) {
-    return <div className="container mx-auto px-4 py-8">Loading...</div>
+    return <PageLoader variant="stats" count={6} message="加载设计中..." />
   }
 
   return (
@@ -455,7 +553,19 @@ export default function MyDesignsPage() {
             </div>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredDesigns.map((design) => (
+              {filteredDesigns.map((design) => {
+                // 添加调试日志
+                const designType = design.design_type || 'svg'
+                console.log(`🎨 Rendering design [${designType}]:`, {
+                  id: design.id,
+                  title: design.title,
+                  design_type: designType,
+                  has_image_url: !!design.image_url,
+                  image_url_preview: design.image_url ? design.image_url.substring(0, 60) + '...' : 'none',
+                  has_components: !!design.components
+                })
+                
+                return (
                 <Card key={design.id} className="overflow-hidden">
                   <div className="px-4 pt-3 pb-0">
                     <div
@@ -476,82 +586,28 @@ export default function MyDesignsPage() {
                           <span>Private</span>
                         </>
                       )}
+                      {/* 显示设计类型标签 */}
+                      {design.design_type === 'ai_image' && (
+                        <span className="ml-2 text-xs bg-blue-500/20 text-blue-600 px-2 py-0.5 rounded">AI</span>
+                      )}
                     </div>
                   </div>
 
                   <div className="px-4 pb-4 cursor-pointer" onClick={() => router.push(`/design/${design.id}`)}>
-                    <svg
-                      viewBox="0 0 300 300"
-                      className="w-full h-48 mb-4 bg-muted rounded-lg hover:scale-105 transition-transform"
-                    >
-                      {/* Background */}
-                      {design.components?.background && (
-                        <g
-                          dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.background)?.svg_data || "",
-                          }}
-                          style={{ color: design.components?.bodyColor }}
-                        />
-                      )}
+                    <div className="mb-4 hover:scale-105 transition-transform">
+                      <DesignPreview 
+                        design={design} 
+                        components={components}
+                        className="hover:scale-105 transition-transform"
+                      />
+                    </div>
 
-                      {/* Body */}
-                      {design.components?.body && (
-                        <g
-                          dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.body)?.svg_data || "",
-                          }}
-                          style={{ color: design.components?.bodyColor }}
-                        />
+                    <h3 className="font-semibold mb-1">
+                      {design.title}
+                      {design.design_type === 'ai_image' && (
+                        <span className="ml-2 text-xs text-muted-foreground">(AI创作)</span>
                       )}
-
-                      {/* Ears */}
-                      {design.components?.ears && (
-                        <g
-                          dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.ears)?.svg_data || "",
-                          }}
-                          style={{ color: design.components?.bodyColor }}
-                        />
-                      )}
-
-                      {/* Eyes */}
-                      {design.components?.eyes && (
-                        <g
-                          dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.eyes)?.svg_data || "",
-                          }}
-                        />
-                      )}
-
-                      {/* Nose */}
-                      {design.components?.nose && (
-                        <g
-                          dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.nose)?.svg_data || "",
-                          }}
-                        />
-                      )}
-
-                      {/* Mouth */}
-                      {design.components?.mouth && (
-                        <g
-                          dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.mouth)?.svg_data || "",
-                          }}
-                        />
-                      )}
-
-                      {/* Accessories */}
-                      {design.components?.accessories && (
-                        <g
-                          dangerouslySetInnerHTML={{
-                            __html: mockComponents.find((c) => c.id === design.components?.accessories)?.svg_data || "",
-                          }}
-                        />
-                      )}
-                    </svg>
-
-                    <h3 className="font-semibold mb-1">{design.title}</h3>
+                    </h3>
                     <p className="text-sm text-muted-foreground mb-3">
                       {new Date(design.created_at).toLocaleDateString()}
                     </p>
@@ -621,7 +677,8 @@ export default function MyDesignsPage() {
                     </div>
                   </div>
                 </Card>
-              ))}
+                )
+              })}
             </div>
           </>
         )}

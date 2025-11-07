@@ -1,37 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// 安全地获取环境变量
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Supabase environment variables are missing')
-}
-
-// 创建匿名客户端用于查询
-const supabase = createClient(
-  supabaseUrl || 'https://example.supabase.co',
-  supabaseKey || 'example-key'
-)
-
-// 创建服务角色客户端用于绕过RLS（在认证失败时使用）
-const serviceClient = serviceKey ? createClient(supabaseUrl || 'https://example.supabase.co', serviceKey) : null
+import { createSupabaseClient, createServiceClient, createAuthenticatedClient, getAccessTokenFromRequest } from '@/lib/supabase-server'
 
 // 获取单个设计的端点
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     
     if (!id) {
       return NextResponse.json({ error: 'Design ID is required' }, { status: 400 })
     }
 
     console.log('GET /api/designs/[id] called with id:', id)
+
+    // 尝试使用认证客户端（如果有token）
+    const token = getAccessTokenFromRequest(_request)
+    const supabase = token 
+      ? createAuthenticatedClient(token) 
+      : createSupabaseClient()
 
     // 首先尝试从数据库查询
     const { data: design, error } = await supabase
@@ -67,6 +55,7 @@ export async function GET(
     console.error('Database query error:', error)
     
     // 如果数据库查询失败，尝试使用服务角色客户端
+    const serviceClient = createServiceClient()
     if (serviceClient) {
       const { data: serviceDesign, error: serviceError } = await serviceClient
         .from('designs')
@@ -121,10 +110,10 @@ export async function GET(
 // 更新设计的端点
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { title, components, is_public } = body
 
@@ -141,7 +130,14 @@ export async function PUT(
       updated_at: new Date().toISOString()
     }
 
+    // 尝试使用认证客户端（如果有token）
+    const token = getAccessTokenFromRequest(request)
+    const authenticatedSupabase = token 
+      ? createAuthenticatedClient(token) 
+      : createSupabaseClient()
+
     // 首先尝试使用服务角色客户端
+    const serviceClient = createServiceClient()
     if (serviceClient) {
       const { data: design, error } = await serviceClient
         .from('designs')
@@ -157,8 +153,8 @@ export async function PUT(
       console.error('Service client update error:', error)
     }
 
-    // 尝试使用匿名客户端
-    const { data: design, error } = await supabase
+    // 尝试使用认证客户端
+    const { data: design, error } = await authenticatedSupabase
       .from('designs')
       .update(updateData)
       .eq('id', id)
@@ -195,10 +191,10 @@ export async function PUT(
 // 删除设计的端点
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     if (!id) {
       return NextResponse.json({ error: 'Design ID is required' }, { status: 400 })
@@ -206,7 +202,14 @@ export async function DELETE(
 
     console.log('DELETE /api/designs/[id] called with id:', id)
 
+    // 尝试使用认证客户端（如果有token）
+    const token = getAccessTokenFromRequest(_request)
+    const authenticatedSupabase = token 
+      ? createAuthenticatedClient(token) 
+      : createSupabaseClient()
+
     // 首先尝试使用服务角色客户端
+    const serviceClient = createServiceClient()
     if (serviceClient) {
       const { error } = await serviceClient
         .from('designs')
@@ -220,8 +223,8 @@ export async function DELETE(
       console.error('Service client delete error:', error)
     }
 
-    // 尝试使用匿名客户端
-    const { error } = await supabase
+    // 尝试使用认证客户端
+    const { error } = await authenticatedSupabase
       .from('designs')
       .delete()
       .eq('id', id)

@@ -1,23 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// 安全地获取环境变量
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Supabase environment variables are missing')
-}
-
-// 创建匿名客户端用于查询
-const supabase = createClient(
-  supabaseUrl || 'https://example.supabase.co',
-  supabaseKey || 'example-key'
-)
-
-// 创建服务角色客户端用于绕过RLS（在认证失败时使用）
-const serviceClient = serviceKey ? createClient(supabaseUrl || 'https://example.supabase.co', serviceKey) : null
+import { createSupabaseClient, createServiceClient } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,6 +17,7 @@ export async function GET(request: NextRequest) {
     let comments = []
     
     // 首先尝试从数据库查询评论
+    const supabase = createSupabaseClient()
     const { data: dbComments, error } = await supabase
       .from('comments')
       .select('*')
@@ -61,12 +44,8 @@ export async function GET(request: NextRequest) {
         console.log('RLS policy violation detected, using service key...')
         
         // 尝试使用服务密钥绕过RLS
-        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-        if (serviceKey) {
-          const serviceClient = createClient(
-            supabaseUrl || 'https://example.supabase.co',
-            serviceKey || 'example-key'
-          )
+        const serviceClient = createServiceClient()
+        if (serviceClient) {
           
           const { data: serviceComments, error: serviceError } = await serviceClient
             .from('comments')
@@ -116,6 +95,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'design_id, content, and user_id are required' }, { status: 400 })
     }
 
+    // 检查是否是临时用户ID（以'temp-'开头）
+    const isTempUser = user_id.startsWith('temp-')
+
+    if (isTempUser) {
+      // 对于临时用户，返回成功但不实际保存到数据库
+      console.log('Temporary user comment:', { user_id, design_id, content })
+      
+      const mockComment = {
+        id: `temp-comment-${Date.now()}`,
+        design_id,
+        content,
+        user_id,
+        user_name: 'You',
+        user_avatar: null,
+        created_at: new Date().toISOString()
+      }
+      
+      return NextResponse.json({ comment: mockComment, isTemp: true }, { status: 201 })
+    }
+
+    const supabase = createSupabaseClient()
+
     // 创建评论数据
     const commentData = {
       design_id,
@@ -141,13 +142,9 @@ export async function POST(request: NextRequest) {
         console.log('RLS policy violation detected, using service key...')
         
         // 尝试使用服务密钥绕过RLS
-        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-        if (serviceKey) {
+        const serviceClient = createServiceClient()
+        if (serviceClient) {
           try {
-            const serviceClient = createClient(
-              supabaseUrl || 'https://example.supabase.co',
-              serviceKey || 'example-key'
-            )
             
             const { data: serviceComment, error: serviceError } = await serviceClient
               .from('comments')

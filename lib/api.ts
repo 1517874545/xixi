@@ -83,6 +83,10 @@ export const designsApi = {
     return data.designs
   },
 
+  async getUserDesigns(userId: string): Promise<Design[]> {
+    return this.getAll({ userId })
+  },
+
   async getById(id: string): Promise<Design> {
     const response = await fetchWithAuth(`${API_BASE_URL}/designs/${id}`)
     if (!response.ok) {
@@ -92,24 +96,57 @@ export const designsApi = {
     return data.design
   },
 
-  async create(design: Omit<Design, 'id' | 'created_at' | 'likes_count' | 'comments_count'> & { user_id: string }): Promise<Design> {
-    const response = await fetchWithAuth(`${API_BASE_URL}/designs`, {
+  async create(design: Omit<Design, 'id' | 'created_at' | 'likes_count' | 'comments_count'> & { user_id: string; design_type?: 'svg' | 'ai_image'; image_url?: string; ai_metadata?: any }): Promise<Design> {
+    console.log('API: Creating design:', design)
+    const response = await fetch(`${API_BASE_URL}/designs`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(design),
     })
+    
+    console.log('API: Response status:', response.status, response.statusText)
+    
     if (!response.ok) {
-      throw new Error('Failed to create design')
+      let errorMessage = '保存设计失败'
+      let errorDetails: any = null
+      try {
+        const errorData = await response.json()
+        errorMessage = errorData.error || errorMessage
+        errorDetails = errorData.details || null
+        console.error('API Error Response:', errorData)
+      } catch {
+        const errorText = await response.text()
+        errorMessage = errorText || errorMessage
+        console.error('API Error Text:', errorText)
+      }
+      console.error('Failed to create design:', errorMessage, errorDetails)
+      throw new Error(errorMessage)
     }
+    
     const data = await response.json()
+    console.log('API: Response data:', data)
+    
+    if (!data.design) {
+      console.error('API: No design in response:', data)
+      throw new Error('服务器响应格式错误：未返回设计数据')
+    }
+    
     return data.design
   },
 
   async update(id: string, updates: Partial<Design>): Promise<Design> {
-    const response = await fetchWithAuth(`${API_BASE_URL}/designs/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/designs/${id}`, {
       method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(updates),
     })
     if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Failed to update design:', errorText)
       throw new Error('Failed to update design')
     }
     const data = await response.json()
@@ -202,6 +239,15 @@ export const commentsApi = {
     }
     const data = await response.json()
     return data.comments
+  },
+
+  async getUserComments(userId: string): Promise<Comment[]> {
+    const response = await fetch(`${API_BASE_URL}/comments?userId=${userId}`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch user comments')
+    }
+    const data = await response.json()
+    return data.comments || []
   },
 
   async create(designId: string, content: string, userId: string): Promise<Comment> {

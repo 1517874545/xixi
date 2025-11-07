@@ -2,13 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useAuth } from "@/lib/auth-context"
+import { useAuthApi } from "@/lib/auth-api-context"
 import { Button } from "@/components/ui/button"
 import { Sparkles, Home, ImageIcon, LogOut, UserCircle } from "lucide-react"
 
 export function Navigation() {
   const pathname = usePathname()
-  const { user, signOut } = useAuth()
+  const { user, signOut } = useAuthApi()
 
   const navLinks = [
     { href: "/", label: "Home", icon: Home },

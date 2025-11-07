@@ -1,12 +1,9 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import "./globals.css"
-import { AuthProvider } from "@/lib/auth-context"
+import { AuthApiProvider } from "@/lib/auth-api-context"
 import { Navigation } from "@/components/navigation"
 import { Toaster } from "@/components/ui/toaster"
-
-const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "PetCraft Studio - Create Your Unique Pet Illustration",
@@ -20,13 +17,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className} suppressHydrationWarning>
-        <AuthProvider>
+    <html lang="en">
+      <body className="font-sans">
+        <AuthApiProvider>
           <Navigation />
           <main className="min-h-screen">{children}</main>
           <Toaster />
-        </AuthProvider>
+        </AuthApiProvider>
       </body>
     </html>
   )

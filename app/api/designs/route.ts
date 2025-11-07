@@ -1,23 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// 安全地获取环境变量
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Supabase environment variables are missing')
-}
-
-// 创建匿名客户端用于查询
-const supabase = createClient(
-  supabaseUrl || 'https://example.supabase.co',
-  supabaseKey || 'example-key'
-)
-
-// 创建服务角色客户端用于绕过RLS（在认证失败时使用）
-const serviceClient = serviceKey ? createClient(supabaseUrl || 'https://example.supabase.co', serviceKey) : null
+import { createSupabaseClient, createServiceClient, createAuthenticatedClient, getAccessTokenFromRequest } from '@/lib/supabase-server'
 
 // 定义全局类型
 interface MockDesign {
@@ -48,6 +30,12 @@ export async function GET(request: NextRequest) {
     
     let allDesigns: MockDesign[] = []
     
+    // 尝试使用认证客户端（如果有token）
+    const token = getAccessTokenFromRequest(request)
+    const supabase = token 
+      ? createAuthenticatedClient(token) 
+      : createSupabaseClient()
+    
     // 构建查询条件
     let query = supabase
       .from('designs')
@@ -70,61 +58,191 @@ export async function GET(request: NextRequest) {
 
     if (!error && dbDesigns) {
       console.log('Found database designs:', dbDesigns.length)
+      console.log('All designs from first query:', dbDesigns.map((d: any) => ({
+        id: d.id,
+        title: d.title,
+        design_type: d.design_type || 'null',
+        user_id: d.user_id,
+        has_image_url: !!d.image_url
+      })))
+      console.log('Design types breakdown:', {
+        svg: dbDesigns.filter((d: any) => !d.design_type || d.design_type === 'svg').length,
+        ai_image: dbDesigns.filter((d: any) => d.design_type === 'ai_image').length,
+        unknown: dbDesigns.filter((d: any) => d.design_type && d.design_type !== 'svg' && d.design_type !== 'ai_image').length,
+        null_or_undefined: dbDesigns.filter((d: any) => !d.design_type).length
+      })
+      console.log('AI designs in query result:', dbDesigns.filter((d: any) => d.design_type === 'ai_image').map((d: any) => ({
+        id: d.id,
+        title: d.title,
+        image_url: d.image_url ? 'has_url' : 'no_url',
+        user_id: d.user_id
+      })))
+      
+      // 注意：这里不做任何修改，因为dbDesigns是const，不能重新赋值
+      // 服务客户端查询会在后面统一处理
+      
+      // 使用服务客户端查询点赞数和评论数，以绕过RLS限制
+      const serviceClient = createServiceClient()
+      const clientForCounts = serviceClient || supabase
+      
+      console.log('Using client for counts:', serviceClient ? 'service client' : 'regular client')
       
       // 为每个数据库设计获取点赞和评论数量
       const dbDesignsWithCounts = await Promise.all(
         dbDesigns.map(async (design) => {
-          const [likesResult, commentsResult] = await Promise.all([
-            supabase
-              .from('likes')
-              .select('id', { count: 'exact', head: true })
-              .eq('design_id', design.id),
-            supabase
-              .from('comments')
-              .select('id', { count: 'exact', head: true })
-              .eq('design_id', design.id)
-          ])
+          try {
+            console.log(`Counting likes/comments for design ${design.id} (${design.title})`)
+            
+            const [likesResult, commentsResult] = await Promise.all([
+              clientForCounts
+                .from('likes')
+                .select('id', { count: 'exact', head: true })
+                .eq('design_id', design.id),
+              clientForCounts
+                .from('comments')
+                .select('id', { count: 'exact', head: true })
+                .eq('design_id', design.id)
+            ])
 
-          return {
-            ...design,
-            likes_count: likesResult.count || 0,
-            comments_count: commentsResult.count || 0
+            const likesCount = likesResult.count ?? 0
+            const commentsCount = commentsResult.count ?? 0
+            
+            console.log(`Design ${design.id}: likes=${likesCount}, comments=${commentsCount}`)
+            
+            // 如果有错误，记录但不抛出
+            if (likesResult.error) {
+              console.error(`Error counting likes for ${design.id}:`, likesResult.error)
+            }
+            if (commentsResult.error) {
+              console.error(`Error counting comments for ${design.id}:`, commentsResult.error)
+            }
+
+            return {
+              ...design,
+              likes_count: likesCount as number,
+              comments_count: commentsCount as number
+            }
+          } catch (countError) {
+            console.error(`Error counting likes/comments for design ${design.id}:`, countError)
+            // 如果查询失败，至少返回设计数据，点赞数和评论数为0
+            return {
+              ...design,
+              likes_count: 0,
+              comments_count: 0
+            }
           }
         })
       )
       
-      allDesigns = [...allDesigns, ...dbDesignsWithCounts]
-    } else {
-      console.error('Supabase query error:', error)
+      console.log('Designs with counts:', dbDesignsWithCounts.map(d => ({
+        id: d.id,
+        title: d.title,
+        likes: d.likes_count,
+        comments: d.comments_count
+      })))
       
-      // 如果数据库查询失败，尝试使用服务角色客户端
-      if (serviceClient) {
-        console.log('Trying service client for database query...')
-        let serviceQuery = serviceClient
-          .from('designs')
-          .select('*')
-          .order('created_at', { ascending: false })
-        
-        if (isPublic === 'true') {
-          serviceQuery = serviceQuery.eq('is_public', true)
-        } else if (isPublic === 'false') {
-          serviceQuery = serviceQuery.eq('is_public', false)
-        }
-        
-        if (userId) {
-          serviceQuery = serviceQuery.eq('user_id', userId)
-        }
-        
-        const { data: serviceDbDesigns, error: serviceError } = await serviceQuery
-        
-        if (!serviceError && serviceDbDesigns) {
-          console.log('Found database designs with service client:', serviceDbDesigns.length)
-          allDesigns = [...allDesigns, ...serviceDbDesigns]
-        } else {
-          console.error('Service client query error:', serviceError)
-        }
-      }
+      allDesigns = [...allDesigns, ...dbDesignsWithCounts]
     }
+    
+    // 无论第一个查询是否成功，都尝试使用服务客户端查询以确保获取所有数据
+    // 这样可以绕过可能的RLS限制
+    const serviceClient = createServiceClient()
+    if (serviceClient) {
+      console.log('🔍 Always trying service client query to ensure we get all designs...')
+      let serviceQuery = serviceClient
+        .from('designs')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (isPublic === 'true') {
+        serviceQuery = serviceQuery.eq('is_public', true)
+      } else if (isPublic === 'false') {
+        serviceQuery = serviceQuery.eq('is_public', false)
+      }
+      
+      if (userId) {
+        serviceQuery = serviceQuery.eq('user_id', userId)
+      }
+      
+      const { data: serviceDbDesigns, error: serviceError } = await serviceQuery
+      
+      if (!serviceError && serviceDbDesigns) {
+        console.log('✅ Found database designs with service client:', serviceDbDesigns.length)
+        console.log('All service client designs:', serviceDbDesigns.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          design_type: d.design_type || 'null',
+          user_id: d.user_id,
+          has_image_url: !!d.image_url
+        })))
+        console.log('Design types breakdown:', {
+          svg: serviceDbDesigns.filter(d => d.design_type === 'svg' || !d.design_type).length,
+          ai_image: serviceDbDesigns.filter(d => d.design_type === 'ai_image').length,
+          null_or_undefined: serviceDbDesigns.filter(d => !d.design_type).length
+        })
+        console.log('AI designs in query result:', serviceDbDesigns
+          .filter(d => d.design_type === 'ai_image')
+          .map(d => ({ id: d.id, title: d.title, image_url: d.image_url ? 'has_url' : 'no_url' })))
+        
+        // 如果服务客户端返回了更多设计，优先使用服务客户端的结果
+        if (serviceDbDesigns.length > allDesigns.length) {
+          console.log(`✅ Service client found ${serviceDbDesigns.length} designs vs ${allDesigns.length} from regular query`)
+          console.log('Using service client results instead of regular query results')
+          // 清空之前的结果，后面会直接用服务客户端的结果替换
+          allDesigns.length = 0
+        }
+        
+        // 为每个设计获取点赞和评论数量（使用服务客户端）
+        const serviceDesignsWithCounts = await Promise.all(
+          serviceDbDesigns.map(async (design) => {
+              try {
+                const [likesResult, commentsResult] = await Promise.all([
+                  serviceClient!
+                    .from('likes')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('design_id', design.id),
+                  serviceClient!
+                    .from('comments')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('design_id', design.id)
+                ])
+
+                return {
+                  ...design,
+                  likes_count: (likesResult.count ?? 0) as number,
+                  comments_count: (commentsResult.count ?? 0) as number
+                }
+              } catch (countError) {
+                console.error(`Error counting likes/comments for design ${design.id}:`, countError)
+                return {
+                  ...design,
+                  likes_count: 0,
+                  comments_count: 0
+                }
+              }
+            })
+          )
+          
+          // 如果服务客户端返回了更多设计，直接使用服务客户端的结果替换所有结果
+          if (serviceDbDesigns.length > (allDesigns.length - serviceDesignsWithCounts.length)) {
+            console.log('✅ Replacing all designs with service client results')
+            // 清空数组并添加新结果
+            allDesigns.splice(0, allDesigns.length, ...serviceDesignsWithCounts)
+          } else {
+            // 否则合并结果，避免重复
+            const existingIds = new Set(allDesigns.map((d: any) => d.id))
+            const newDesigns = serviceDesignsWithCounts.filter((d: any) => !existingIds.has(d.id))
+            if (newDesigns.length > 0) {
+              allDesigns.push(...newDesigns)
+            }
+          }
+        } else {
+          console.error('❌ Service client query error:', serviceError)
+          console.error('   Error details:', serviceError?.message, serviceError?.details)
+        }
+      } else {
+        console.log('⚠️ Service client not available')
+      }
 
     // 检查是否有内存中的模拟设计
     const mockDesigns = global.mockDesigns || []
@@ -145,8 +263,48 @@ export async function GET(request: NextRequest) {
     
     console.log('Filtered mock designs:', filteredMockDesigns.length)
     
-    // 合并数据库设计和模拟设计
-    allDesigns = [...allDesigns, ...filteredMockDesigns]
+    // 确保模拟设计也有点赞数和评论数（如果没有，从数据库查询）
+    const mockDesignsWithCounts = await Promise.all(
+      filteredMockDesigns.map(async (design) => {
+        // 如果已经有计数，直接返回
+        if (design.likes_count !== undefined && design.comments_count !== undefined) {
+          return design
+        }
+        
+        // 否则从数据库查询
+        try {
+          const serviceClient = createServiceClient()
+          const clientForCounts = serviceClient || supabase
+          
+          const [likesResult, commentsResult] = await Promise.all([
+            clientForCounts
+              .from('likes')
+              .select('id', { count: 'exact', head: true })
+              .eq('design_id', design.id),
+            clientForCounts
+              .from('comments')
+              .select('id', { count: 'exact', head: true })
+              .eq('design_id', design.id)
+          ])
+
+          return {
+            ...design,
+            likes_count: (likesResult.count ?? 0) as number,
+            comments_count: (commentsResult.count ?? 0) as number
+          }
+        } catch (countError) {
+          console.error(`Error counting likes/comments for mock design ${design.id}:`, countError)
+          return {
+            ...design,
+            likes_count: design.likes_count ?? 0,
+            comments_count: design.comments_count ?? 0
+          }
+        }
+      })
+    )
+    
+    // 合并数据库设计和模拟设计（使用包含计数的版本）
+    allDesigns = [...allDesigns, ...mockDesignsWithCounts]
     
     // 如果没有设计，返回空数组
     if (allDesigns.length === 0) {
@@ -157,7 +315,24 @@ export async function GET(request: NextRequest) {
     allDesigns.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     
     console.log('Returning all designs:', allDesigns.length)
-    return NextResponse.json({ designs: allDesigns })
+    console.log('Total likes in response:', allDesigns.reduce((sum, d) => sum + (d.likes_count || 0), 0))
+    console.log('Total comments in response:', allDesigns.reduce((sum, d) => sum + (d.comments_count || 0), 0))
+    
+    // 确保所有设计都有 likes_count 和 comments_count
+    const finalDesigns = allDesigns.map(d => ({
+      ...d,
+      likes_count: d.likes_count ?? 0,
+      comments_count: d.comments_count ?? 0
+    }))
+    
+    console.log('Final designs summary:', finalDesigns.map(d => ({
+      id: d.id,
+      title: d.title,
+      likes_count: d.likes_count,
+      comments_count: d.comments_count
+    })))
+    
+    return NextResponse.json({ designs: finalDesigns })
   } catch (error) {
     console.error('GET /api/designs error:', error)
     
@@ -169,51 +344,109 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { title, components, is_public = false, user_id } = body
+    const { title, components, is_public = false, user_id, design_type, image_url, ai_metadata } = body
 
-    console.log('Received design data:', { title, components, is_public, user_id })
+    console.log('Received design data:', { title, components, is_public, user_id, design_type, image_url })
 
     // 验证必需字段
     if (!user_id) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
+    // 检查是否是临时用户ID（以'temp-'开头）
+    const isTempUser = user_id.startsWith('temp-')
+    
+    // 只有AI设计才要求登录，SVG设计允许临时用户
+    if (isTempUser && design_type === 'ai_image') {
+      // 对于临时用户，返回错误提示用户登录
+      return NextResponse.json(
+        { 
+          error: '请先登录以保存AI设计。临时账户无法保存到数据库。',
+          requiresLogin: true
+        },
+        { status: 403 }
+      )
+    }
+
+    // 验证设计类型
+    if (design_type === 'ai_image' && !image_url) {
+      return NextResponse.json({ error: 'AI图片类型必须提供image_url' }, { status: 400 })
+    }
+
+    // SVG类型必须提供components，但允许空对象（某些情况下可能需要）
+    if (design_type === 'svg' && components === undefined) {
+      return NextResponse.json({ error: 'SVG类型必须提供components' }, { status: 400 })
+    }
+
     // 创建设计数据
-    const designData = {
+    const designData: any = {
       title: title || 'Untitled Design',
-      components: components || {},
       is_public: is_public || false,
       user_id: user_id,
+      design_type: design_type || 'svg', // 默认为svg类型
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
 
+    // 根据设计类型添加相应的数据
+    if (design_type === 'ai_image') {
+      designData.image_url = image_url
+      designData.ai_metadata = ai_metadata || null
+      designData.components = {} // AI图片可以没有components
+    } else {
+      designData.components = components || {}
+    }
+
     console.log('Attempting to insert design:', designData)
 
+    // 尝试使用认证客户端（如果有token）
+    const token = getAccessTokenFromRequest(request)
+    const authenticatedSupabase = token 
+      ? createAuthenticatedClient(token) 
+      : createSupabaseClient()
+
     // 首先尝试使用服务角色客户端（绕过RLS）
+    const serviceClient = createServiceClient()
     if (serviceClient) {
+      console.log('Attempting to insert design with service client:', designData)
       const { data: design, error } = await serviceClient
         .from('designs')
         .insert([designData])
         .select()
         .single()
 
-      if (!error) {
-        console.log('Design created successfully with service key:', design)
+      if (!error && design) {
+        console.log('✅ Design created successfully with service key')
+        console.log('   Design ID:', design.id)
+        console.log('   Design type:', design.design_type)
+        console.log('   Image URL:', design.image_url)
+        console.log('   Title:', design.title)
+        console.log('   User ID:', design.user_id)
+        console.log('   Full design object:', JSON.stringify(design, null, 2))
         return NextResponse.json({ design }, { status: 201 })
       }
-      console.error('Service client insert error:', error)
+      console.error('❌ Service client insert error:', error)
+      console.error('   Error code:', error?.code)
+      console.error('   Error message:', error?.message)
+      console.error('   Error details:', error?.details)
+      console.error('   Error hint:', error?.hint)
     }
 
-    // 如果服务客户端失败，尝试使用匿名客户端（需要正确的RLS策略）
-    const { data: design, error } = await supabase
+    // 如果服务客户端失败，尝试使用认证客户端（需要正确的RLS策略）
+    const { data: design, error } = await authenticatedSupabase
       .from('designs')
       .insert([designData])
       .select()
       .single()
 
-    if (!error) {
-      console.log('Design created successfully:', design)
+    if (!error && design) {
+      console.log('✅ Design created successfully with authenticated client')
+      console.log('   Design ID:', design.id)
+      console.log('   Design type:', design.design_type)
+      console.log('   Image URL:', design.image_url)
+      console.log('   Title:', design.title)
+      console.log('   User ID:', design.user_id)
+      console.log('   Full design object:', JSON.stringify(design, null, 2))
       
       // 确保设计数据也保存到内存中，以便立即在前端显示
       global.mockDesigns = global.mockDesigns || []
@@ -230,40 +463,8 @@ export async function POST(request: NextRequest) {
 
     console.error('Supabase insert error:', error)
     
-    // 如果数据库插入失败，尝试从请求头获取认证信息
-    const authHeader = request.headers.get('authorization')
-    if (authHeader) {
-      console.log('Attempting to use authenticated request...')
-      
-      // 创建带认证的客户端
-      const token = authHeader.replace('Bearer ', '')
-      const authClient = createClient(
-        supabaseUrl || 'https://example.supabase.co',
-        supabaseKey || 'example-key',
-        {
-          global: {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
-        }
-      )
-      
-      const { data: authDesign, error: authError } = await authClient
-        .from('designs')
-        .insert([designData])
-        .select()
-        .single()
-
-      if (!authError) {
-        console.log('Design created successfully with auth token:', authDesign)
-        return NextResponse.json({ design: authDesign }, { status: 201 })
-      }
-      console.error('Authenticated client insert error:', authError)
-    }
-    
     // 如果 RLS 策略阻止插入，尝试直接使用服务角色客户端插入到数据库
-    if (serviceClient && error.code === '42501') {
+    if (serviceClient && error?.code === '42501') {
       console.log('RLS policy violation detected, attempting direct service client insert...')
       
       // 尝试使用服务角色客户端直接插入（绕过所有策略检查）
@@ -278,53 +479,39 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ design: directDesign }, { status: 201 })
       }
       console.error('Direct service client insert error:', directError)
+      
+      // 如果服务客户端也失败，返回详细的错误信息
+      return NextResponse.json(
+        { 
+          error: directError?.message || '无法保存设计到数据库。请检查数据库连接和权限设置。',
+          details: directError
+        },
+        { status: 500 }
+      )
     }
     
-    // 如果所有数据库操作都失败，创建模拟数据但确保它能在GET中返回
-    console.log('Creating persistent mock design...')
-    const mockDesign = {
-      id: `mock-${Date.now()}`,
-      ...designData,
-      likes_count: 0,
-      comments_count: 0
-    }
+    // 如果所有数据库操作都失败，返回错误而不是创建模拟数据
+    const errorMessage = error?.message || '数据库操作失败'
+    console.error('All database operations failed:', errorMessage)
     
-    // 将模拟设计存储到内存中，以便GET可以返回它
-    global.mockDesigns = global.mockDesigns || []
-    global.mockDesigns.push(mockDesign)
-    
-    // 同时保存到本地存储，确保数据持久化
-    if (typeof global !== 'undefined') {
-      try {
-        // 在服务器端保存到文件或数据库
-        console.log('Mock design saved to memory:', mockDesign)
-      } catch (saveError) {
-        console.error('Failed to save mock design to persistent storage:', saveError)
-      }
-    }
-    
-    console.log('Mock design created and stored:', mockDesign)
-    return NextResponse.json({ design: mockDesign }, { status: 201 })
+    return NextResponse.json(
+      { 
+        error: errorMessage || '无法保存设计。请检查数据库连接。',
+        details: error
+      },
+      { status: 500 }
+    )
   } catch (error) {
     console.error('POST /api/designs error:', error)
     
-    // 创建模拟响应作为最后的备选方案
-    const mockDesign = {
-      id: `mock-error-${Date.now()}`,
-      title: 'Untitled Design',
-      components: {},
-      is_public: false,
-      user_id: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      likes_count: 0,
-      comments_count: 0
-    }
-    
-    // 存储模拟设计
-    global.mockDesigns = global.mockDesigns || []
-    global.mockDesigns.push(mockDesign)
-    
-    return NextResponse.json({ design: mockDesign }, { status: 201 })
+    // 返回错误信息而不是创建模拟数据
+    const errorMessage = error instanceof Error ? error.message : '内部服务器错误'
+    return NextResponse.json(
+      { 
+        error: errorMessage,
+        details: error instanceof Error ? error.stack : String(error)
+      },
+      { status: 500 }
+    )
   }
 }
